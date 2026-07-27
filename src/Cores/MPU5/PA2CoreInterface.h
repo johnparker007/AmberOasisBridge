@@ -1,0 +1,234 @@
+#pragma once
+
+// Plain C/C# compatible Project Amber 2 core interface structures.
+// Keep this header free of C++ classes/STL types and compiler-dependent bools.
+
+#include <stdint.h>
+
+#ifndef _MSC_VER
+#  ifndef __fastcall
+#    define __fastcall
+#  endif
+#endif
+
+// The older project code uses Windows-style fixed-width aliases (UINT8, INT16,
+// etc).  Define them when this header is used outside windows.h/basetsd.h.
+#ifndef _BASETSD_H_
+typedef int8_t   INT8;
+typedef uint8_t  UINT8;
+typedef int16_t  INT16;
+typedef uint16_t UINT16;
+typedef int32_t  INT32;
+typedef uint32_t UINT32;
+typedef int64_t  INT64;
+typedef uint64_t UINT64;
+#endif
+
+#define PA2_OUTPUT_SNAPSHOT_VERSION 2
+
+#define PA2_MAX_MATRIX_LAMPS       512
+#define PA2_MAX_DIRECT_LAMPS       32
+#define PA2_MAX_FLO_LAMPS          4
+#define PA2_MAX_PRISM_LAMPS        16
+#define PA2_MAX_LEDS               512
+#define PA2_MAX_TRIAC_LAMPS        32
+#define PA2_MAX_FLUORESCENT_LAMPS  8
+#define PA2_MAX_DISCO_LAMPS        64
+
+#define PA2_NUM_REELS              8
+#define PA2_NUM_ALPHA_DISPLAYS     2
+#define PA2_NUM_ALPHA_CHARS        16
+#define PA2_NUM_ALPHA_SEGMENTS     16
+#define PA2_ALPHA_SEGMENTS_MPU4     14
+#define PA2_ALPHA_SEGMENTS_IMPACT   16
+#define PA2_NUM_LED_DISPLAYS       40
+#define PA2_NUM_LED_SEGMENTS       8
+
+#define PA2_MAX_ELECTRONIC_MECHS   1
+#define PA2_MAX_MECHANICAL_MECHS   8
+#define PA2_MAX_COIN_ENTRY_LAMPS   10
+
+#define PA2_NUM_METERS             6
+#define PA2_NUM_TUBES              8
+#define PA2_NUM_DIPS               16
+#define PA2_NUM_HOPPERS            2
+
+#define PA2_AUDIO_FORMAT_VERSION   1
+#define PA2_AUDIO_FORMAT_PCM_S16   1
+
+#define PA2_MPU5_TIMING_STATS_VERSION 2
+
+// Status LED states. Values 0 and 1 preserve the original off/on ABI used by
+// existing cores; MPU5 can additionally expose its red and combined yellow.
+#define PA2_STATUS_LED_OFF          0
+#define PA2_STATUS_LED_ON           1
+#define PA2_STATUS_LED_GREEN        1
+#define PA2_STATUS_LED_RED          2
+#define PA2_STATUS_LED_YELLOW       3
+#define PA2_STATUS_LED_STATE_COUNT  4
+
+#pragma pack(push, 4)
+
+struct PA2_LampState
+{
+    UINT8 OnOff;
+    UINT8 Reserved0;
+    UINT8 Reserved1;
+    UINT8 Reserved2;
+
+    float Brightness;   // 0..1 normal, >1 allowed for over-bright
+    float FilamentR;
+    float FilamentG;
+    float FilamentB;
+};
+
+struct PA2_ReelState
+{
+    INT32 Position;
+};
+
+struct PA2_AlphaSegmentedState
+{
+    // 14 = MPU4 native alpha, 16 = IMPACT/System 6 native alpha.
+    // Segment masks remain native to the emulated hardware; the front-end
+    // expands 14-segment MPU4 masks into its existing 16-segment renderer.
+    UINT8  SegmentCount;
+    UINT8  Reserved0;
+    UINT8  Reserved1;
+    UINT8  Reserved2;
+
+    UINT16 Segments[PA2_NUM_ALPHA_CHARS];
+    UINT8  DotComma[PA2_NUM_ALPHA_CHARS];
+    float  Brightness;
+};
+
+struct PA2_AlphaDotState
+{
+    UINT8 Columns[PA2_NUM_ALPHA_CHARS][5];
+    UINT8 DotComma[PA2_NUM_ALPHA_CHARS];
+    float Brightness;
+};
+
+struct PA2_LedDisplayState
+{
+    UINT32 OnOff;
+    float  Brightness;
+};
+
+struct PA2_ElectronicMechState
+{
+    UINT8 CoinLamp[2];
+    UINT8 LockoutState;
+    UINT8 Reserved0;
+};
+
+struct PA2_MechanicalMechState
+{
+    UINT8 Enabled;
+    UINT8 MeterPulse;
+    UINT8 LockoutState;
+    UINT8 Reserved0;
+};
+
+struct PA2_AudioFormat
+{
+    UINT32 SizeBytes;
+    UINT32 Version;
+    UINT32 SampleRate;     // e.g. 48000
+    UINT32 Channels;       // external API target is 2
+    UINT32 BitsPerSample;  // external API target is 16
+    UINT32 Format;         // PA2_AUDIO_FORMAT_PCM_S16
+};
+
+// Optional MPU5 diagnostic packet.  These counters verify the nominal 16 MHz
+// request stream and expose CPU32 external-bus/wait-state timing costs.
+struct PA2_MPU5TimingStats
+{
+    UINT32 SizeBytes;
+    UINT32 Version;
+
+    UINT64 RunCalls;
+    UINT64 RequestedCycles;
+    UINT64 ExecutedCycles;
+    UINT64 DeviceCycles;
+    UINT64 Instructions;
+
+    INT64 RunCycleCarry;
+    INT32 MaximumRunAhead;
+    UINT32 Reserved0;
+
+    UINT64 ExternalBusCycles;
+    UINT64 BusPenaltyCycles;
+    UINT64 ChipSelectAccesses[4];
+    UINT64 ChipSelectPenaltyCycles[4];
+};
+
+struct PA2_OutputSnapshot
+{
+    UINT32 SizeBytes;
+    UINT32 Version;
+
+    UINT32 MatrixLampCount;
+    UINT32 DirectLampCount;
+    UINT32 FloLampCount;
+    UINT32 PrismLampCount;
+    UINT32 LedCount;
+    UINT32 TriacLampCount;
+    UINT32 FluorescentLampCount;
+    UINT32 DiscoLampCount;
+    UINT32 ReelCount;
+    UINT32 AlphaSegmentedDisplayCount;
+    UINT32 AlphaDotDisplayCount;
+    UINT32 LedDisplayCount;
+    UINT32 ElectronicMechCount;
+    UINT32 MechanicalMechCount;
+    UINT32 CoinEntryLampCount;
+    UINT32 MeterCount;
+    UINT32 TubeCount;
+    UINT32 DipCount;
+    UINT32 HopperCount;
+
+    PA2_LampState MatrixLamps[PA2_MAX_MATRIX_LAMPS];
+    PA2_LampState DirectLamps[PA2_MAX_DIRECT_LAMPS];
+    PA2_LampState FloLamps[PA2_MAX_FLO_LAMPS];
+    PA2_LampState PrismLamps[PA2_MAX_PRISM_LAMPS];
+    PA2_LampState Leds[PA2_MAX_LEDS];
+    PA2_LampState TriacLamps[PA2_MAX_TRIAC_LAMPS];
+    PA2_LampState FluorescentLamps[PA2_MAX_FLUORESCENT_LAMPS];
+    PA2_LampState DiscoLamps[PA2_MAX_DISCO_LAMPS];
+
+    PA2_ReelState Reels[PA2_NUM_REELS];
+
+    PA2_AlphaSegmentedState AlphaSegmented[PA2_NUM_ALPHA_DISPLAYS];
+    PA2_AlphaDotState AlphaDot[PA2_NUM_ALPHA_DISPLAYS];
+
+    PA2_LedDisplayState LedDisplays[PA2_NUM_LED_DISPLAYS];
+
+    PA2_ElectronicMechState ElectronicMechs[PA2_MAX_ELECTRONIC_MECHS];
+    PA2_MechanicalMechState MechanicalMechs[PA2_MAX_MECHANICAL_MECHS];
+    PA2_LampState CoinEntryLamps[PA2_MAX_COIN_ENTRY_LAMPS];
+
+    UINT32 Meters[PA2_NUM_METERS];
+
+    UINT32 TubeLevel[PA2_NUM_TUBES];
+    UINT32 TubeFullLevel[PA2_NUM_TUBES];
+    UINT32 TubeLoLevel[PA2_NUM_TUBES];
+    UINT32 TubeHiLevel[PA2_NUM_TUBES];
+
+    UINT8 Dips[PA2_NUM_DIPS];
+
+    UINT32 HopperLevel[PA2_NUM_HOPPERS];
+    UINT32 HopperFullLevel[PA2_NUM_HOPPERS];
+    UINT32 HopperLoLevel[PA2_NUM_HOPPERS];
+    UINT32 HopperHiLevel[PA2_NUM_HOPPERS];
+    UINT32 HopperCoinsIn[PA2_NUM_HOPPERS];
+    UINT32 HopperCoinsOut[PA2_NUM_HOPPERS];
+    UINT32 HopperCoinsRefilled[PA2_NUM_HOPPERS];
+
+    UINT8 StatusLED;
+    UINT8 Reserved0;
+    UINT8 Reserved1;
+    UINT8 Reserved2;
+};
+
+#pragma pack(pop)

@@ -1,15 +1,23 @@
-# Imported project build assessment
+# Emulator project build assessment
 
-The project and solution files remain byte-for-byte imported; none were rewritten for their new repository locations.
+## Upstream/reference metadata
 
-| Platform | Solution/project format | Toolset | Relative-path assessment | Verification |
-| --- | --- | --- | --- | --- |
-| Epoch | Solution format 12.00 (labelled Visual Studio 2012); MSBuild C++ project `ToolsVersion="15.0"`; Windows 10 SDK | `v145` | The solution-to-project path `EpochCore\\EpochCore.vcxproj` remains valid after moving the whole tree. No external relative source paths were found. | Not built: this environment has no Visual Studio C++/MSBuild toolchain or Windows SDK. |
-| JPM System 6 | Solution format 12.00 (labelled Visual Studio 18); MSBuild C++ project `ToolsVersion="15.0"`; Windows 10 SDK | `v143` | The solution-to-project path remains valid. The optional `$(SolutionDir)BuildSupport\\AmberRuntimeDeps.props` file is absent, but its import is conditional; this was already absent before the move. | Not built: this environment has no Visual Studio C++/MSBuild toolchain or Windows SDK. |
-| MPU5 | Solution format 12.00 (labelled Visual Studio 18); MSBuild C++ project (no explicit `ToolsVersion`); Windows 10 SDK | `v145` | The solution-to-project path and project-local include paths remain valid. No external relative source paths were found. | Not built: this environment has no Visual Studio C++/MSBuild toolchain or Windows SDK. |
+The files below remain imported, immutable history; their settings have not been rewritten.
 
-## Conclusions
+| Platform | Imported project metadata | Toolset | Historical output layout |
+| --- | --- | --- | --- |
+| Epoch | VS 2012-labelled solution; C++ project `ToolsVersion="15.0"`; Windows 10 SDK | `v145` | Solution-local `Debug32/64` and `Release32/64` |
+| JPM System 6 | VS 18-labelled solution; C++ project `ToolsVersion="15.0"`; Windows 10 SDK | `v143` | Solution-local `Debug32/64` and `Release32/64` |
+| MPU5 | VS 18-labelled solution; Windows 10 SDK | `v145` | Solution-local `Debug32/64` and `Release32/64` |
 
-- Moving each complete project tree preserves its solution-relative paths; no path-only project adjustment is currently proposed.
-- Toolsets `v145` and Visual Studio 18 identifiers may require pre-release or locally specific tooling and could not be verified here. They have intentionally not been upgraded or normalised.
-- Removed `Debug64` and `Release64` file lists and link outputs were generated build products, not build inputs.
+JPM System 6's optional `BuildSupport/AmberRuntimeDeps.props` import remains conditional; that file was absent from the imported delivery.
+
+## Maintained Oasis metadata
+
+| Project | IDE/toolset | Solution configurations | Output |
+| --- | --- | --- | --- |
+| `AmberOasis.Epoch` | Visual Studio 2022 / `v143` | `Debug|x64`, `Release|x64` | `build/bin/$(Platform)/$(Configuration)/AmberOasis.Epoch.dll` |
+| `AmberOasis.JPMSystem6` | Visual Studio 2022 / `v143` | `Debug|x64`, `Release|x64` | `build/bin/$(Platform)/$(Configuration)/AmberOasis.JPMSystem6.dll` |
+| `AmberOasis.MPU5` | Visual Studio 2022 / `v143` | `Debug|x64`, `Release|x64` | `build/bin/$(Platform)/$(Configuration)/AmberOasis.MPU5.dll` |
+
+The maintained projects also retain clean Win32 project configurations, but the umbrella solution intentionally advertises only the required x64 configurations. Intermediate files go to `build/obj/<ProjectName>/$(Platform)/$(Configuration)/`.
