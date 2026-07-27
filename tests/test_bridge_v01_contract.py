@@ -130,6 +130,44 @@ class BridgeV01ContractTests(unittest.TestCase):
             self.verifier,
         )
 
+    def test_verifier_supports_consecutive_partial_rom_sets(self):
+        for parameter in [
+            "ProgramRom1", "ProgramRom2", "ProgramRom3", "ProgramRom4",
+            "SoundRom1", "SoundRom2", "SoundRom3", "SoundRom4",
+        ]:
+            self.assertIn(f"[string]${parameter}", self.verifier)
+        self.assertIn("function Resolve-RomSlots", self.verifier)
+        self.assertIn("if ($gap)", self.verifier)
+        self.assertIn("consecutively starting with ${Kind}Rom1", self.verifier)
+        self.assertIn("Test-Path -LiteralPath $value -PathType Leaf", self.verifier)
+        self.assertIn("Resolve-Path -LiteralPath $value", self.verifier)
+        self.assertIn("$runtimeArgs += '--program-rom'", self.verifier)
+        self.assertIn("$runtimeArgs += '--sound-rom'", self.verifier)
+        self.assertNotIn("all four program ROM", self.verifier)
+
+        def slots_are_consecutive(values):
+            gap = False
+            for value in values:
+                if not value:
+                    gap = True
+                elif gap:
+                    return False
+            return True
+
+        for count in range(5):
+            self.assertTrue(slots_are_consecutive(["rom"] * count + [None] * (4 - count)))
+        self.assertFalse(slots_are_consecutive([None, "rom", None, None]))
+        self.assertFalse(slots_are_consecutive(["rom", None, "rom", None]))
+        self.assertTrue(slots_are_consecutive(["sound", None, None, None]))
+        self.assertIn('throw "$parameterName does not exist: $value"', self.verifier)
+
+    def test_diagnostic_maps_only_supplied_rom_arguments_to_slots(self):
+        self.assertIn('L"--program-rom"', self.diagnostic)
+        self.assertIn('L"--sound-rom"', self.diagnostic)
+        self.assertIn("params.program_roms[i]=program_args[i].c_str()", self.diagnostic)
+        self.assertIn("params.sound_roms[i]=sound_args[i].c_str()", self.diagnostic)
+        self.assertIn("if (loaded && p && p->sound_roms[0])", self.bridge)
+
 
 if __name__ == "__main__":
     unittest.main()

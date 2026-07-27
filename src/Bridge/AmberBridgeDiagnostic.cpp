@@ -86,9 +86,21 @@ int wmain(int argc,wchar_t** wide_argv) {
         std::wprintf(L"JPM DLL: %ls\n",core_path.c_str()); std::puts("Required JPM exports: resolved successfully");
         if(argc>1) {
             uint32_t steps=100; if(!ParseSteps(steps))goto cleanup;
-            std::vector<std::string> args; args.reserve(static_cast<size_t>(argc-1));
-            for(int i=1;i<argc&&i<=4;++i){int n=WideCharToMultiByte(CP_UTF8,WC_ERR_INVALID_CHARS,wide_argv[i],-1,nullptr,0,nullptr,nullptr);if(n<=0){std::fputs("ROM path UTF-8 conversion failed\n",stderr);goto cleanup;}std::string s(static_cast<size_t>(n),'\0');WideCharToMultiByte(CP_UTF8,WC_ERR_INVALID_CHARS,wide_argv[i],-1,s.data(),n,nullptr,nullptr);s.pop_back();args.push_back(s);}
-            AmberInitialiseParams params{sizeof(params)}; for(size_t i=0;i<args.size();++i)params.program_roms[i]=args[i].c_str();
+            std::vector<std::string> program_args, sound_args;
+            for(int i=1;i<argc;++i) {
+                bool program=std::wcscmp(wide_argv[i],L"--program-rom")==0;
+                bool sound=std::wcscmp(wide_argv[i],L"--sound-rom")==0;
+                if((!program&&!sound)||++i>=argc){std::fputs("Usage: AmberBridgeDiagnostic [--program-rom PATH]... [--sound-rom PATH]...\n",stderr);goto cleanup;}
+                std::vector<std::string>& target=program?program_args:sound_args;
+                if(target.size()>=4){std::fputs("At most four program and four sound ROMs are supported\n",stderr);goto cleanup;}
+                int n=WideCharToMultiByte(CP_UTF8,WC_ERR_INVALID_CHARS,wide_argv[i],-1,nullptr,0,nullptr,nullptr);
+                if(n<=0){std::fputs("ROM path UTF-8 conversion failed\n",stderr);goto cleanup;}
+                std::string value(static_cast<size_t>(n),'\0');
+                WideCharToMultiByte(CP_UTF8,WC_ERR_INVALID_CHARS,wide_argv[i],-1,value.data(),n,nullptr,nullptr); value.pop_back(); target.push_back(value);
+            }
+            AmberInitialiseParams params{sizeof(params)};
+            for(size_t i=0;i<program_args.size();++i)params.program_roms[i]=program_args[i].c_str();
+            for(size_t i=0;i<sound_args.size();++i)params.sound_roms[i]=sound_args[i].c_str();
             result=api.Initialise(handle,&params); std::printf("Initialise result: %u\n",static_cast<unsigned>(result));
             if(result!=AMBER_OK){PrintApiError(api,handle,"Initialise",result);goto cleanup;} initialised=true;
             int32_t ran=0; std::printf("Requested Run value: %u\n",steps); result=api.Run(handle,steps,&ran);

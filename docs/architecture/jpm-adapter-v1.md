@@ -4,7 +4,19 @@
 
 The bridge obtains its own module handle with `GetModuleHandleExW(FROM_ADDRESS | UNCHANGED_REFCOUNT)`, dynamically grows a `GetModuleFileNameW` buffer, removes the `AmberBridge.dll` filename, and constructs the absolute path `<bridge directory>\AmberOasis.JPMSystem6.dll`. It loads only that path using `LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_SYSTEM32`; target-local dependencies and Windows system dependencies are therefore available, while the working directory, PATH, host executable directory, user-added DLL directories, and caller-provided locations are excluded. The diagnostic independently constructs the absolute bridge path from its executable directory and applies the same dependency-search restriction.
 
-Load failures report the attempted path, numeric Windows code, and `FormatMessageW` text. Error 126 can mean either that the target is absent or that a transitive dependency is unavailable. Debug JPM builds require the matching Debug Visual C++ runtime; Release deployment must contain compatible Release-built bridge/core binaries and their supported runtime. Run `tools/verify_bridge_v01.ps1` in a VS2022/v143 developer environment to build and inspect both x64 configurations.
+Load failures report the attempted path, numeric Windows code, and `FormatMessageW` text. Error 126 can mean either that the target is absent or that a transitive dependency is unavailable. Debug JPM builds require the matching Debug Visual C++ runtime; Release deployment must contain compatible Release-built bridge/core binaries and their supported runtime.
+
+Run `tools/verify_bridge_v01.ps1` with no ROM parameters for loader-only verification. Runtime verification accepts one through four consecutive program paths and one through four consecutive sound paths; each family must begin at slot 1 and contain no gaps. Supplied files are resolved to absolute paths and checked before the diagnostic starts. Examples:
+
+```powershell
+# Two program ROMs and one sound ROM
+.\tools\verify_bridge_v01.ps1 -ProgramRom1 "C:\roms\game-1.bin" -ProgramRom2 "C:\roms\game-2.bin" -SoundRom1 "C:\roms\sound.bin"
+
+# Four program ROMs
+.\tools\verify_bridge_v01.ps1 -ProgramRom1 "C:\roms\game-1.bin" -ProgramRom2 "C:\roms\game-2.bin" -ProgramRom3 "C:\roms\game-3.bin" -ProgramRom4 "C:\roms\game-4.bin"
+```
+
+Only supplied paths are passed as `--program-rom` or `--sound-rom` arguments. Omitted trailing slots remain null in `AmberInitialiseParams`; no dummy files are substituted.
 
 ## Exact maintained declarations
 

@@ -225,10 +225,8 @@ AmberResult InitialiseImpl(AmberHandle h, const AmberInitialiseParams* p) {
     if (!h->exports.initialise()) { h->state=State::InitialiseFailed; SetLiveError(h,"JPM Initialise failed; Destroy is now permitted"); return AMBER_INITIALISE_FAILED; }
     h->core_initialised=true;
     bool loaded=true;
-    if (p && p->program_roms[0]) {
-        loaded=LoadPaths(h->exports.load_rom,p->program_roms);
-        if (loaded && p->sound_roms[0]) loaded=LoadPaths(h->exports.load_sound_rom,p->sound_roms);
-    }
+    if (p && p->program_roms[0]) loaded=LoadPaths(h->exports.load_rom,p->program_roms);
+    if (loaded && p && p->sound_roms[0]) loaded=LoadPaths(h->exports.load_sound_rom,p->sound_roms);
     if (!loaded) {
         (void)h->exports.shutdown(); h->core_shutdown=true; h->core_initialised=false; h->state=State::InitialiseFailed;
         SetLiveError(h,"JPM ROM load failed; core was shut down and Destroy is now permitted"); return AMBER_INITIALISE_FAILED;
