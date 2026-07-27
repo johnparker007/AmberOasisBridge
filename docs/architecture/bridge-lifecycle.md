@@ -1,0 +1,7 @@
+# Bridge lifecycle
+
+The supported policy remains one active emulator instance per process. `Create("jpm-system6")` loads and validates the core and returns an opaque handle; a second create returns `AMBER_INSTANCE_LIMIT`. Every operation must be serialized by the frontend.
+
+The successful flow is `Created -> Initialised -> Running -> Shutdown -> Destroyed`. Run is repeatable. Reset is accepted in Initialised or Running and returns to Initialised. Initialise twice, Run before Initialise, repeated Shutdown, Destroy while the core remains active, and every use of a stale/destroyed/arbitrary/null handle are rejected without invoking the core. A handle is compared with the current live instance before any dereference; invalid-handle diagnostics go to thread-local storage.
+
+JPM lifecycle completion is tracked separately from the visible state. Each successful JPM `Initialise` permits at most one JPM `Shutdown`. If ROM loading fails after core initialisation, the bridge calls Shutdown once, marks the core inactive and enters InitialiseFailed. If JPM Initialise itself fails, no Shutdown is called. In either case **Destroy directly** is the required and sufficient cleanup; calling Shutdown after failed Initialise is rejected. A reported Shutdown failure is still recorded as an attempted/completed shutdown for at-most-once safety, and Destroy remains permitted. Destroy calls `FreeLibrary` once and invalidates the handle.

@@ -8,6 +8,10 @@ Project("{BC8A1FFA-BEE3-4634-8014-F334798102B3}") = "AmberOasis.JPMSystem6", "..
 EndProject
 Project("{BC8A1FFA-BEE3-4634-8014-F334798102B3}") = "AmberOasis.MPU5", "..\src\Cores\MPU5\AmberOasis.MPU5.vcxproj", "{78BF8957-7482-49F5-A9C8-B1B92C95C855}"
 EndProject
+Project("{BC8A1FFA-BEE3-4634-8014-F334798102B3}") = "AmberBridge", "..\src\Bridge\AmberBridge.vcxproj", "{7A16F714-6CD8-47BB-8F26-03ED31EF87F1}"
+EndProject
+Project("{BC8A1FFA-BEE3-4634-8014-F334798102B3}") = "AmberBridgeDiagnostic", "..\src\Bridge\AmberBridgeDiagnostic.vcxproj", "{85A40F25-564F-4E16-ABDA-7B0367075E47}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -26,6 +30,14 @@ Global
 		{78BF8957-7482-49F5-A9C8-B1B92C95C855}.Debug|x64.Build.0 = Debug|x64
 		{78BF8957-7482-49F5-A9C8-B1B92C95C855}.Release|x64.ActiveCfg = Release|x64
 		{78BF8957-7482-49F5-A9C8-B1B92C95C855}.Release|x64.Build.0 = Release|x64
+		{7A16F714-6CD8-47BB-8F26-03ED31EF87F1}.Debug|x64.ActiveCfg = Debug|x64
+		{7A16F714-6CD8-47BB-8F26-03ED31EF87F1}.Debug|x64.Build.0 = Debug|x64
+		{7A16F714-6CD8-47BB-8F26-03ED31EF87F1}.Release|x64.ActiveCfg = Release|x64
+		{7A16F714-6CD8-47BB-8F26-03ED31EF87F1}.Release|x64.Build.0 = Release|x64
+		{85A40F25-564F-4E16-ABDA-7B0367075E47}.Debug|x64.ActiveCfg = Debug|x64
+		{85A40F25-564F-4E16-ABDA-7B0367075E47}.Debug|x64.Build.0 = Debug|x64
+		{85A40F25-564F-4E16-ABDA-7B0367075E47}.Release|x64.ActiveCfg = Release|x64
+		{85A40F25-564F-4E16-ABDA-7B0367075E47}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
