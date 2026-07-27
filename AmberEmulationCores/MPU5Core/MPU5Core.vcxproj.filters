@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Source Files"><UniqueIdentifier>{A9F963F2-81A8-4DA8-91C4-3E4B0063E84A}</UniqueIdentifier><Extensions>cpp;c;cxx</Extensions></Filter>
+    <Filter Include="Header Files"><UniqueIdentifier>{6D8CCB4C-7427-48B3-9C65-6BAEB2E61D3A}</UniqueIdentifier><Extensions>h;hpp</Extensions></Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="stdafx.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="Interface.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="MPU5.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="Alpha.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="Lamps.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="FilamentLamp.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="MarsMech.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="Meters.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="Reels.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="Segments.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="Hoppers.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="SCN68681.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="EDC.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="MPU5ASIC.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="MPU5PIC.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="MPU5SEC.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="MPU5Sound.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="MC68340SIM.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="MC68340Timer.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="MC68340Serial.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="MC68340DMA.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="m68kcpu.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="m68kopac.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="m68kopdm.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="m68kopnz.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="m68kops.cpp"><Filter>Source Files</Filter></ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="stdafx.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="Interface.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="PA2CoreInterface.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="MPU5.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="Alpha.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="Lamps.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="FilamentLamp.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="MarsMech.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="Meters.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="Reels.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="Segments.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="Hoppers.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="SCN68681.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="EDC.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="MPU5ASIC.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="MPU5PIC.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="MPU5SEC.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="MPU5Sound.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="MC68340SIM.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="MC68340Timer.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="MC68340Serial.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="MC68340DMA.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="m68k.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="m68kconf.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="m68kcpu.h"><Filter>Header Files</Filter></ClInclude>
+  </ItemGroup>
+</Project>
