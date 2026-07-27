@@ -68,36 +68,27 @@
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
-  <Import Project="$(SolutionDir)BuildSupport\AmberRuntimeDeps.props" Condition="Exists('$(SolutionDir)BuildSupport\AmberRuntimeDeps.props')" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <TargetName>AmberOasis.JPMSystem6</TargetName>
     <LinkIncremental>true</LinkIncremental>
-    <IncludePath>C:\Program Files %28x86%29\Microsoft DirectX SDK %28June 2010%29\Include;$(IncludePath)</IncludePath>
-    <LibraryPath>C:\Program Files %28x86%29\Microsoft DirectX SDK %28June 2010%29\Lib\x86;$(LibraryPath)</LibraryPath>
     <OutDir>$(SolutionDir)..\build\bin\$(Platform)\$(Configuration)\</OutDir>
     <IntDir>$(SolutionDir)..\build\obj\AmberOasis.JPMSystem6\$(Platform)\$(Configuration)\</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <TargetName>AmberOasis.JPMSystem6</TargetName>
     <LinkIncremental>true</LinkIncremental>
-    <IncludePath>C:\Program Files %28x86%29\Microsoft DirectX SDK %28June 2010%29\Include;$(IncludePath)</IncludePath>
-    <LibraryPath>C:\Program Files %28x86%29\Microsoft DirectX SDK %28June 2010%29\Lib\x64;$(LibraryPath)</LibraryPath>
     <OutDir>$(SolutionDir)..\build\bin\$(Platform)\$(Configuration)\</OutDir>
     <IntDir>$(SolutionDir)..\build\obj\AmberOasis.JPMSystem6\$(Platform)\$(Configuration)\</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <TargetName>AmberOasis.JPMSystem6</TargetName>
     <LinkIncremental>false</LinkIncremental>
-    <IncludePath>C:\Program Files %28x86%29\Microsoft DirectX SDK %28June 2010%29\Include;$(IncludePath)</IncludePath>
-    <LibraryPath>C:\Program Files %28x86%29\Microsoft DirectX SDK %28June 2010%29\Lib\x86;$(LibraryPath)</LibraryPath>
     <OutDir>$(SolutionDir)..\build\bin\$(Platform)\$(Configuration)\</OutDir>
     <IntDir>$(SolutionDir)..\build\obj\AmberOasis.JPMSystem6\$(Platform)\$(Configuration)\</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <TargetName>AmberOasis.JPMSystem6</TargetName>
     <LinkIncremental>false</LinkIncremental>
-    <IncludePath>C:\Program Files %28x86%29\Microsoft DirectX SDK %28June 2010%29\Include;$(IncludePath)</IncludePath>
-    <LibraryPath>C:\Program Files %28x86%29\Microsoft DirectX SDK %28June 2010%29\Lib\x64;$(LibraryPath)</LibraryPath>
     <OutDir>$(SolutionDir)..\build\bin\$(Platform)\$(Configuration)\</OutDir>
     <IntDir>$(SolutionDir)..\build\obj\AmberOasis.JPMSystem6\$(Platform)\$(Configuration)\</IntDir>
   </PropertyGroup>
