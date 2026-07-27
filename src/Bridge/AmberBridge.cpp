@@ -1,5 +1,8 @@
 #include "amber/amber_api.h"
 
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
 #include <windows.h>
 #include <cstddef>
 #include <cstdint>
@@ -281,7 +284,7 @@ AmberResult LastErrorImpl(AmberHandle h,char* buffer,uint32_t capacity,uint32_t*
 AmberResult AMBER_CALL LastError(AmberHandle h,char* b,uint32_t c,uint32_t* r) noexcept { try{return LastErrorImpl(h,b,c,r);}catch(const std::exception& e){SetExceptionError(IsLive(h)?h:nullptr,e.what());}catch(...){SetExceptionError(IsLive(h)?h:nullptr,nullptr);}return AMBER_INTERNAL_ERROR; }
 }
 
-extern "C" AMBER_EXPORT AmberResult AMBER_CALL AmberGetApi(uint32_t version,uint32_t size,AmberApiV1* api) noexcept {
+extern "C" AMBER_EXPORT AmberResult AMBER_CALL AmberGetApi(uint32_t version,uint32_t size,AmberApiV1* api) {
     try {
         if (!api) return AMBER_INVALID_ARGUMENT;
         if (version!=AMBER_API_VERSION_1) return AMBER_UNSUPPORTED_VERSION;

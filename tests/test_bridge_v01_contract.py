@@ -12,6 +12,7 @@ class BridgeV01ContractTests(unittest.TestCase):
         cls.types = (ROOT / "include/amber/amber_types.h").read_text()
         cls.api = (ROOT / "include/amber/amber_api.h").read_text()
         cls.bridge = (ROOT / "src/Bridge/AmberBridge.cpp").read_text()
+        cls.diagnostic = (ROOT / "src/Bridge/AmberBridgeDiagnostic.cpp").read_text()
         cls.jpm_header = (ROOT / "src/Cores/JPMSystem6/Interface.h").read_text()
 
     def test_result_values_are_stable_and_appended(self):
@@ -92,6 +93,26 @@ class BridgeV01ContractTests(unittest.TestCase):
     def test_no_v02_capabilities_in_public_api(self):
         for forbidden in ["Lamp", "Reel", "Display", "Audio", "Snapshot", "Input", "Persistence"]:
             self.assertNotIn(forbidden, self.api)
+
+    def test_nominmax_precedes_windows_header_in_bridge_translation_units(self):
+        for name, source in [("AmberBridge.cpp", self.bridge),
+                             ("AmberBridgeDiagnostic.cpp", self.diagnostic)]:
+            define = source.index("#define NOMINMAX")
+            windows = source.index("#include <windows.h>")
+            self.assertLess(define, windows, name)
+            self.assertIn("#ifndef NOMINMAX", source[:define], name)
+
+    def test_amber_get_api_definition_matches_header_exception_specification(self):
+        declaration = re.search(r"AmberGetApi\([^;]+;", self.api, re.S).group(0)
+        definition = re.search(r"AmberGetApi\([^\{]+\{", self.bridge, re.S).group(0)
+        self.assertNotIn("noexcept", declaration)
+        self.assertNotIn("noexcept", definition)
+        self.assertIn("try {", self.bridge[self.bridge.index(definition):])
+
+    def test_diagnostic_uses_secure_environment_reading(self):
+        self.assertIn('_dupenv_s(&value,&length,"AMBER_DIAGNOSTIC_STEPS")', self.diagnostic)
+        self.assertNotRegex(self.diagnostic, r"\b(?:std::)?getenv\s*\(")
+        self.assertIn("std::free(value)", self.diagnostic)
 
 
 if __name__ == "__main__":

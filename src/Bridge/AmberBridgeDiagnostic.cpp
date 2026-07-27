@@ -1,4 +1,7 @@
 #include "amber/amber_api.h"
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
 #include <windows.h>
 #include <cerrno>
 #include <cstring>
@@ -34,10 +37,15 @@ static void PrintApiError(const AmberApiV1& api,AmberHandle handle,const char* o
 }
 
 static bool ParseSteps(uint32_t& steps) {
-    const char* value=std::getenv("AMBER_DIAGNOSTIC_STEPS"); if(!value)return true;
-    if(!*value){std::fputs("AMBER_DIAGNOSTIC_STEPS must not be empty\n",stderr);return false;}
+    char* value=nullptr; size_t length=0;
+    errno_t environment_error=_dupenv_s(&value,&length,"AMBER_DIAGNOSTIC_STEPS");
+    if(environment_error!=0){std::fprintf(stderr,"Could not read AMBER_DIAGNOSTIC_STEPS (errno %d)\n",environment_error);return false;}
+    if(!value)return true;
+    if(!*value){std::free(value);std::fputs("AMBER_DIAGNOSTIC_STEPS must not be empty\n",stderr);return false;}
     char* end=nullptr; errno=0; unsigned long long parsed=std::strtoull(value,&end,10);
-    if(errno==ERANGE||*end!='\0'||parsed==0||parsed>std::numeric_limits<uint32_t>::max()) {
+    bool valid=errno!=ERANGE&&*end=='\0'&&parsed!=0&&parsed<=std::numeric_limits<uint32_t>::max();
+    std::free(value);
+    if(!valid) {
         std::fputs("AMBER_DIAGNOSTIC_STEPS must be an integer from 1 through 4294967295\n",stderr); return false;
     }
     steps=static_cast<uint32_t>(parsed); return true;
