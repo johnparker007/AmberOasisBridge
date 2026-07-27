@@ -30,7 +30,9 @@ typedef enum AmberResult {
     AMBER_INVALID_STATE = 5,
     AMBER_INSTANCE_LIMIT = 6,
     AMBER_INITIALISE_FAILED = 7,
-    AMBER_INTERNAL_ERROR = 8
+    AMBER_INTERNAL_ERROR = 8,
+    AMBER_NO_MORE_ITEMS = 9,
+    AMBER_BUFFER_TOO_SMALL = 10
 } AmberResult;
 
 typedef struct AmberBridgeInfo {
