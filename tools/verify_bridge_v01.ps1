@@ -15,7 +15,7 @@ function Assert-Exports([string]$Dll, [string[]]$Expected, [switch]$AllowOthers)
     if (-not (Test-Path $Dll)) { throw "Missing DLL: $Dll" }
     $dump = & dumpbin.exe /nologo /exports $Dll 2>&1
     if ($LASTEXITCODE -ne 0) { throw "dumpbin failed for $Dll`n$dump" }
-    $names = @($dump | ForEach-Object { if ($_ -match '^\s+\d+\s+[0-9A-F]+\s+[0-9A-F]+\s+(\S+)\s*$') { $Matches[1] } })
+    $names = @($dump | ForEach-Object { if ($_ -match '^\s+\d+\s+[0-9A-Fa-f]+\s+[0-9A-Fa-f]+\s+(\S+)(?:\s+=.*)?\s*$') { $Matches[1] } })
     foreach ($name in $Expected) { if ($names -notcontains $name) { throw "Missing export '$name' in $Dll" } }
     if (-not $AllowOthers) {
         $unexpected = @($names | Where-Object { $Expected -notcontains $_ })

@@ -14,6 +14,7 @@ class BridgeV01ContractTests(unittest.TestCase):
         cls.bridge = (ROOT / "src/Bridge/AmberBridge.cpp").read_text()
         cls.diagnostic = (ROOT / "src/Bridge/AmberBridgeDiagnostic.cpp").read_text()
         cls.jpm_header = (ROOT / "src/Cores/JPMSystem6/Interface.h").read_text()
+        cls.verifier = (ROOT / "tools/verify_bridge_v01.ps1").read_text()
 
     def test_result_values_are_stable_and_appended(self):
         expected = {
@@ -113,6 +114,21 @@ class BridgeV01ContractTests(unittest.TestCase):
         self.assertIn('_dupenv_s(&value,&length,"AMBER_DIAGNOSTIC_STEPS")', self.diagnostic)
         self.assertNotRegex(self.diagnostic, r"\b(?:std::)?getenv\s*\(")
         self.assertIn("std::free(value)", self.diagnostic)
+
+    def test_dumpbin_parser_accepts_release_and_debug_alias_lines(self):
+        pattern = re.compile(
+            r"^\s+\d+\s+[0-9A-Fa-f]+\s+[0-9A-Fa-f]+\s+(\S+)(?:\s+=.*)?\s*$"
+        )
+        examples = [
+            "          1    0 00012340 AmberGetApi",
+            "          1    0 00012340 AmberGetApi = @ILT+1470(AmberGetApi)",
+        ]
+        self.assertEqual([pattern.match(line).group(1) for line in examples],
+                         ["AmberGetApi", "AmberGetApi"])
+        self.assertIn(
+            r"(\S+)(?:\s+=.*)?\s*$'",
+            self.verifier,
+        )
 
 
 if __name__ == "__main__":
