@@ -1,6 +1,6 @@
 # API v2 capabilities and observable data
 
-`AmberCapabilitiesV1.feature_bits` is a 64-bit, versioned mask returned for an already-created instance. The System 6 adapter is designed to report all six currently defined bits: switch input, output snapshot, audio, reel configuration, coin configuration, and percentage switch. Unknown bits are ignored by clients. `max_switches` is 256 for System 6; other limits are ABI constants in the proposal header and actual output counts come from each snapshot.
+`AmberCapabilitiesV1.feature_bits` is a 64-bit, versioned mask returned for an already-created instance. The System 6 adapter reports when all corresponding optional exports resolve all six currently defined bits: switch input, output snapshot, audio, reel configuration, coin configuration, and percentage switch. Unknown bits are ignored by clients. `max_switches` is 256 for System 6; other limits are ABI constants in the production header and actual output counts come from each snapshot.
 
 A function is present even when its bit is clear and then returns `AMBER_NOT_SUPPORTED`. Capability absence is distinct from `AMBER_UNSUPPORTED_VERSION`, which applies only to `AmberGetApi` negotiation or an independently versioned structure.
 
@@ -26,3 +26,9 @@ Unused array tails and reserved fields are zero. A count of zero is the unavaila
 ## Brightness
 
 The public ABI avoids compiler floating-point representation as persistent contract data. One conversion is used for lamps, alpha, and seven-segment brightness. For source `value`: NaN or either infinity makes the snapshot fail with `AMBER_INTERNAL_ERROR` and the caller's snapshot remains zeroed; `value <= 0` becomes zero; a finite positive value is multiplied by 65536 in a range-checked wider floating calculation and rounded to nearest integer with exact halves rounded upward (equivalent to `floor(scaled + 0.5)`); a finite result greater than `UINT32_MAX` saturates to `UINT32_MAX`. Thus 65536 is nominal brightness 1.0. Lamp brightness may exceed 1.0 and is not clamped to unity. Alpha and seven-segment brightness normally range 0..65536.
+
+## System 6 display audit
+
+The maintained System 6 segment driver contains 256 cells arranged as 16 strobe groups of 16 data lines. Although `PA2_NUM_LED_DISPLAYS` and the legacy `LedDisplays` array reserve 40 records, `GetSegOn` and `GetSegBright` explicitly return zero above cell 255. Consequently only displays 0 through 15 can contain independent data; records 16 through 39 are legacy capacity, not additional System 6 displays. V2 therefore reports 16. Display `d` uses cells `d*16+0` through `d*16+7`; the other eight cells in that strobe are outside the public eight-segment record. The maintained mask construction shifts cell 0 first, so cell 0 maps to public bit 7 and cell 7 (including the hardware decimal-point line when wired there) maps to bit 0. Brightness is the maximum of exactly those same eight visible cells.
+
+System 6 has one independently addressable alpha device (`Alpha1`). Its 16-bit native segment masks are preserved without reordering. `DotCommaBuffer` stores the controller character codes 46 (`'.'`) and 44 (`','`); its normal sentinel is 6 and unknown values are treated as no punctuation. Native alpha brightness is already emitted by the maintained snapshot as `GetAlphaBright()/31`, then converted by the common Q16.16 rule.

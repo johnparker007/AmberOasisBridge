@@ -32,7 +32,10 @@ typedef enum AmberResult {
     AMBER_INITIALISE_FAILED = 7,
     AMBER_INTERNAL_ERROR = 8,
     AMBER_NO_MORE_ITEMS = 9,
-    AMBER_BUFFER_TOO_SMALL = 10
+    AMBER_BUFFER_TOO_SMALL = 10,
+    AMBER_NOT_SUPPORTED = 11,
+    AMBER_INVALID_RANGE = 12,
+    AMBER_MALFORMED_CONFIGURATION = 13
 } AmberResult;
 
 typedef struct AmberBridgeInfo {

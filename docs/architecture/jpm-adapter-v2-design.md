@@ -40,3 +40,9 @@ V2 format is 48000/2/PCM_S16/interleaved. `frames_written` is always non-null an
 ## Former snapshot discrepancies
 
 The PA2 snapshot is packed to 4 bytes and contains broad cross-core categories. System 6 populates matrix lamps, a 512-element LED/segment plane, reels, alpha, a legacy count of 40 LED displays, coin mech, meters, tubes, DIPs and hoppers, while leaving many counts zero. V2 does not copy it blindly: it uses natural ABI alignment, fixed integers/Q16.16, only AB2 visual categories, corrects the duplicated two-alpha-display claim, and reports the 16 displays addressable through the maintained 256-cell plane at its 16-cell stride. Its deterministic brightness is the maximum of each display's eight visible cells, not the legacy `GetSegBright(display)` expression.
+
+## Retained partial configuration and disabled reels
+
+Successful partial reel and coin calls merge into adapter-owned state. Selected entries replace their prior retained values, masks accumulate, and an omitted lockout flag preserves a previously retained lockout-port setting. Reset therefore reapplies the union of all successful partial calls. Validation failures change neither the native core nor retained state.
+
+System 6 has no reel-enable export. `enabled=0` is strictly an adapter reapplication policy: setters for that selected reel are omitted. It does not stop a currently driven reel or undo properties already applied during the current native session. After the next native Reset the core returns to its defaults and the disabled retained entry is deliberately not reapplied. Snapshot position remains observable. Clients must not interpret this field as an immediate native motor-disable command.
