@@ -26,7 +26,7 @@ All output storage is caller-owned and remains valid only according to caller st
 * `GetCapabilities` reports the instance core's feature mask and limits; it does not require initialisation.
 * `SetSwitchState` accepts switch indices 0..255 and `is_on` exactly 0 or 1. It is persistent-level, idempotent, and includes coin switches when a project models a coin as a matrix switch. The distinct Mars coin accepter pulse operation is not exposed in v2 (see deferred work).
 * `GetOutputSnapshot` returns one fixed-capacity, coherent copy. No size-query call is needed. Counts bound meaningful zero-based prefixes; all unavailable entries/counts are zero.
-* `GetAudioFormat` reports signed 16-bit PCM; `FillAudioFrames` receives capacity and returns production in **frames**, never bytes or samples.
+* `GetAudioFormat` reports signed 16-bit PCM; `FillAudioFrames` receives capacity and returns production in **frames**, never bytes or samples. `frames_written` is mandatory and is set to zero before handle, state, capacity, or destination validation. At zero capacity the sample pointer may be null and the call succeeds with zero; at nonzero capacity it must be non-null and aligned for `int16_t`. Before writing, the bridge verifies that `frame_capacity * channels` and its byte size are representable in `uint32_t` and `size_t`; overflow is `AMBER_INVALID_RANGE`. Partial fills are successful and unwritten capacity is left unchanged.
 * `ConfigureReels` and `ConfigureCoins` validate the complete aggregate before changing anything. Apply masks select entries; unselected entries retain current/default configuration.
 * `SetPercentageSwitch` accepts the raw 4-bit switch value 0..15, not a human percentage.
 
@@ -49,7 +49,7 @@ No packing directive is used. Fixed integers retain normal C alignment and funct
 | `AmberReelConfigV1` / aggregate | 24 / 208 | aggregate entries 16 |
 | `AmberCoinChannelConfigV1` | 20 | lockout_invert 12 |
 | `AmberCoinRouteConfigV1` | 32 | counter_in 8, level 24 |
-| `AmberCoinConfigurationV1` | 408 | channels 16, routes 136, lockout_port_base 392 |
+| `AmberCoinConfigurationV1` | 408 | channels 16, routes 136, lockout base 392, value 396, flags 400, reserved 404 |
 | `AmberApiV1` / `AmberApiV2` | 80 / 144 | v1 first pointer 8, v2 GetCapabilities 80, SetPercentageSwitch 136 |
 
 The contract test compiles these assertions as C11 and C++17 and checks the prefix offsets. C++ exceptions must never cross any table function boundary.

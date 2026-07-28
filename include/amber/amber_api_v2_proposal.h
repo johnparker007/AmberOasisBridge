@@ -33,6 +33,9 @@ extern "C" {
 
 #define AMBER_AUDIO_SAMPLE_PCM_S16 1u
 #define AMBER_AUDIO_INTERLEAVED 1u
+#define AMBER_ALPHA_DECIMAL_POINT UINT8_C(0x01)
+#define AMBER_ALPHA_COMMA_TAIL UINT8_C(0x02)
+#define AMBER_COIN_CONFIG_APPLY_LOCKOUT_PORT UINT32_C(0x00000001)
 
 /* Proposed append-only AmberResult values; v1's declaration is unchanged. */
 #define AMBER_NOT_SUPPORTED ((AmberResult)11)
@@ -132,7 +135,8 @@ typedef struct AmberCoinConfigurationV1 {
     AmberCoinRouteConfigV1 routes[AMBER_MAX_COIN_ROUTES];
     uint32_t lockout_port_base;
     uint32_t lockout_port_value;
-    uint32_t reserved[2];
+    uint32_t configuration_flags;
+    uint32_t reserved;
 } AmberCoinConfigurationV1;
 
 typedef struct AmberApiV2 {
