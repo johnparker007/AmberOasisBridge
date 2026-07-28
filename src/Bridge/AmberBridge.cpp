@@ -71,7 +71,7 @@ struct AmberInstance_t {
 };
 
 static_assert(sizeof(PA2_LampState)==20, "maintained PA2 lamp layout changed");
-static_assert(offsetof(PA2_OutputSnapshot, MatrixLamps)==80, "maintained PA2 snapshot header changed");
+static_assert(offsetof(PA2_OutputSnapshot, MatrixLamps)==84, "maintained PA2 snapshot header changed");
 static_assert(offsetof(PA2_OutputSnapshot, Reels)>offsetof(PA2_OutputSnapshot, Leds), "maintained PA2 snapshot array order changed");
 static_assert(offsetof(PA2_OutputSnapshot, AlphaSegmented)>offsetof(PA2_OutputSnapshot, Reels), "maintained PA2 alpha layout changed");
 static_assert(offsetof(PA2_OutputSnapshot, LedDisplays)>offsetof(PA2_OutputSnapshot, AlphaSegmented), "maintained PA2 LED layout changed");

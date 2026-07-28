@@ -2,11 +2,14 @@ import pathlib, shutil, subprocess, tempfile, unittest
 ROOT=pathlib.Path(__file__).resolve().parents[1]
 SOURCE=r'''
 #include "AmberBridgeV2Adapter.h"
+#include "PA2CoreInterface.h"
+#include <cstddef>
 #include <cassert>
 #include <cmath>
 #include <cstdint>
 #include <limits>
 int main() {
+ static_assert(sizeof(PA2_LampState)==20); static_assert(offsetof(PA2_OutputSnapshot,MatrixLamps)==84);
  uint32_t q=99; assert(amber_v2::ToQ16_16(0,q)&&q==0); assert(amber_v2::ToQ16_16(0.5,q)&&q==32768);
  assert(amber_v2::ToQ16_16(1.0/65536.0/2.0,q)&&q==1); assert(amber_v2::ToQ16_16(1e20,q)&&q==UINT32_MAX);
  assert(!amber_v2::ToQ16_16(NAN,q)); assert(!amber_v2::ToQ16_16(INFINITY,q)); assert(!amber_v2::ToQ16_16(-INFINITY,q));
@@ -32,5 +35,5 @@ class AdapterRuntimeTests(unittest.TestCase):
   if not compiler:self.skipTest('c++ unavailable')
   with tempfile.TemporaryDirectory() as d:
    source=pathlib.Path(d)/'adapter.cpp'; binary=pathlib.Path(d)/'adapter';source.write_text(SOURCE)
-   subprocess.run([compiler,'-std=c++17','-Wall','-Wextra','-Werror','-I',str(ROOT/'include'),'-I',str(ROOT/'src/Bridge'),str(source),'-o',str(binary)],check=True)
+   subprocess.run([compiler,'-std=c++17','-Wall','-Wextra','-Werror','-I',str(ROOT/'include'),'-I',str(ROOT/'src/Bridge'),'-I',str(ROOT/'src/Cores/JPMSystem6'),str(source),'-o',str(binary)],check=True)
    subprocess.run([str(binary)],check=True)
