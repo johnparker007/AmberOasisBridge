@@ -1,4 +1,5 @@
 #include "amber/amber_api.h"
+#include "AmberBridgeV2Adapter.h"
 #include "../Cores/JPMSystem6/PA2CoreInterface.h"
 
 #ifndef NOMINMAX
@@ -36,7 +37,7 @@ using JpmGetSnapshot = JpmUint32 (__cdecl *)(void*, JpmUint32);
 using JpmGetAudioFormat = JpmUint32 (__cdecl *)(PA2_AudioFormat*, JpmUint32);
 using JpmFillAudioFrames = JpmUint32 (__cdecl *)(int16_t*, JpmUint32);
 
-enum class State { Created, Initialised, Running, Shutdown, InitialiseFailed };
+enum class State { Created, Initialised, Running, Shutdown, InitialiseFailed, ConfigurationInconsistent };
 struct Exports {
     JpmGetDllVersion version{};
     JpmInitialise initialise{};
@@ -69,6 +70,12 @@ struct AmberInstance_t {
     bool configuration_consistent{true};
 };
 
+static_assert(sizeof(PA2_LampState)==20, "maintained PA2 lamp layout changed");
+static_assert(offsetof(PA2_OutputSnapshot, MatrixLamps)==80, "maintained PA2 snapshot header changed");
+static_assert(offsetof(PA2_OutputSnapshot, Reels)>offsetof(PA2_OutputSnapshot, Leds), "maintained PA2 snapshot array order changed");
+static_assert(offsetof(PA2_OutputSnapshot, AlphaSegmented)>offsetof(PA2_OutputSnapshot, Reels), "maintained PA2 alpha layout changed");
+static_assert(offsetof(PA2_OutputSnapshot, LedDisplays)>offsetof(PA2_OutputSnapshot, AlphaSegmented), "maintained PA2 LED layout changed");
+
 namespace {
 std::mutex g_mutex;
 AmberInstance_t* g_instance = nullptr;
@@ -92,6 +99,10 @@ void SetLiveError(AmberHandle handle, const char* message) noexcept {
 AmberResult InvalidHandle() noexcept {
     SetGlobalError("invalid, stale, or destroyed Amber handle");
     return AMBER_INVALID_STATE;
+}
+
+AmberResult LiveFailure(AmberHandle handle, AmberResult result, const char* message) noexcept {
+    SetLiveError(handle,message); return result;
 }
 
 void SetExceptionError(AmberHandle handle, const char* detail) noexcept {
@@ -175,6 +186,9 @@ template<typename T> bool ResolveOptional(HMODULE library, const char* name, T& 
 
 AmberResult BridgeInfoImpl(AmberBridgeInfo* info) {
     if (!info || info->struct_size < sizeof(AmberBridgeInfo)) return AMBER_INVALID_ARGUMENT;
+    // This record is the immutable v0.1.1 information contract used by the
+    // released Oasis wrapper.  The returned table's api_version identifies
+    // whether v1 or v2 was negotiated.
     info->api_version = AMBER_API_VERSION_1; info->name = "Amber Bridge"; info->bridge_version = "0.1.1"; return AMBER_OK;
 }
 AmberResult AMBER_CALL BridgeInfo(AmberBridgeInfo* info) noexcept {
@@ -304,10 +318,10 @@ void ApplyCoins(AmberInstance_t* h, const AmberCoinConfigurationV1& c) {
 
 AmberResult ResetImpl(AmberHandle h) {
     if (!IsLive(h)) return InvalidHandle();
-    if (h->state!=State::Initialised && h->state!=State::Running) { SetLiveError(h,"reset requires an initialised or running instance"); return AMBER_INVALID_STATE; }
+    if (h->state!=State::Initialised && h->state!=State::Running && h->state!=State::ConfigurationInconsistent) { SetLiveError(h,"reset requires an initialised, running, or configuration-inconsistent instance"); return AMBER_INVALID_STATE; }
     h->exports.reset();
     try { if(h->has_reel_config) ApplyReels(h,h->reel_config); if(h->has_coin_config) ApplyCoins(h,h->coin_config); if(h->has_percentage) h->exports.percent(h->percentage); }
-    catch (...) { h->configuration_consistent=false; h->state=State::InitialiseFailed; SetLiveError(h,"reset configuration reapplication failed"); return AMBER_INTERNAL_ERROR; }
+    catch (...) { h->configuration_consistent=false; h->state=State::ConfigurationInconsistent; SetLiveError(h,"reset configuration reapplication failed"); return AMBER_INTERNAL_ERROR; }
     h->configuration_consistent=true; h->state=State::Initialised; return AMBER_OK;
 }
 AmberResult AMBER_CALL Reset(AmberHandle h) noexcept { try{return ResetImpl(h);}catch(const std::exception& e){SetExceptionError(IsLive(h)?h:nullptr,e.what());}catch(...){SetExceptionError(IsLive(h)?h:nullptr,nullptr);}return AMBER_INTERNAL_ERROR; }
@@ -323,7 +337,7 @@ AmberResult AMBER_CALL Run(AmberHandle h,uint32_t c,int32_t* r) noexcept { try{r
 
 AmberResult ShutdownImpl(AmberHandle h) {
     if (!IsLive(h)) return InvalidHandle();
-    if (!h->core_initialised || h->core_shutdown || (h->state!=State::Initialised && h->state!=State::Running)) { SetLiveError(h,"shutdown requires an active initialised or running core"); return AMBER_INVALID_STATE; }
+    if (!h->core_initialised || h->core_shutdown || (h->state!=State::Initialised && h->state!=State::Running && h->state!=State::ConfigurationInconsistent)) { SetLiveError(h,"shutdown requires an active initialised, running, or configuration-inconsistent core"); return AMBER_INVALID_STATE; }
     JpmUint8 result=h->exports.shutdown(); h->core_shutdown=true; h->core_initialised=false;
     h->has_reel_config=false; h->has_coin_config=false; h->has_percentage=false; h->configuration_consistent=true;
     if (!result) { h->state=State::InitialiseFailed; SetLiveError(h,"JPM Shutdown reported failure; Destroy is permitted"); return AMBER_INTERNAL_ERROR; }
@@ -350,15 +364,12 @@ bool Operational(AmberHandle h, const char* operation) {
 }
 AmberResult Unsupported(AmberHandle h,const char* feature) { char m[180]{}; std::snprintf(m,sizeof(m),"JPM System 6 does not provide the optional %s exports",feature); SetLiveError(h,m); return AMBER_NOT_SUPPORTED; }
 bool ReservedZero(const uint32_t* p,size_t n) { for(size_t i=0;i<n;i++) if(p[i]) return false; return true; }
-bool Q16(double value,uint32_t& out) {
-    if(!std::isfinite(value)) return false; if(value<=0) { out=0; return true; }
-    double scaled=value*65536.0; if(scaled>=static_cast<double>(UINT32_MAX)) out=UINT32_MAX; else out=static_cast<uint32_t>(std::floor(scaled+0.5)); return true;
-}
 
 AmberResult CapabilitiesImpl(AmberHandle h,AmberCapabilitiesV1* c) {
     if(!IsLive(h)) return InvalidHandle(); if(!c) { SetLiveError(h,"capabilities pointer is null"); return AMBER_INVALID_ARGUMENT; }
     if(c->struct_size<sizeof(*c)) { SetLiveError(h,"capabilities structure is too small"); return AMBER_BUFFER_TOO_SMALL; }
-    if(c->version!=AMBER_CAPABILITIES_VERSION_1 || !ReservedZero(c->reserved,3)) { SetLiveError(h,"capabilities version or reserved input is invalid"); return AMBER_MALFORMED_CONFIGURATION; }
+    if(c->version!=AMBER_CAPABILITIES_VERSION_1) return LiveFailure(h,AMBER_INVALID_ARGUMENT,"unsupported capabilities structure version");
+    if(!ReservedZero(c->reserved,3)) return LiveFailure(h,AMBER_MALFORMED_CONFIGURATION,"capabilities reserved input fields must be zero");
     std::memset(c,0,sizeof(*c)); c->struct_size=sizeof(*c); c->version=AMBER_CAPABILITIES_VERSION_1; c->feature_bits=h->capabilities; c->max_switches=AMBER_MAX_SWITCHES; return AMBER_OK;
 }
 #define AMBER_WRAP2(name,args,call) AmberResult AMBER_CALL name args noexcept { try{return call;}catch(const std::exception& e){SetExceptionError(IsLive(h)?h:nullptr,e.what());}catch(...){SetExceptionError(IsLive(h)?h:nullptr,nullptr);}return AMBER_INTERNAL_ERROR; }
@@ -372,45 +383,61 @@ AMBER_WRAP2(SetSwitchState,(AmberHandle h,uint32_t i,uint32_t on),SwitchImpl(h,i
 AmberResult SnapshotImpl(AmberHandle h,AmberOutputSnapshotV1* out) { if(!IsLive(h)) return InvalidHandle(); if(!Operational(h,"GetOutputSnapshot")) return AMBER_INVALID_STATE;
     if(!(h->capabilities&AMBER_CAP_OUTPUT_SNAPSHOT)) return Unsupported(h,"output snapshot"); if(!out) { SetLiveError(h,"snapshot pointer is null"); return AMBER_INVALID_ARGUMENT; }
     if(out->struct_size<sizeof(*out)) { SetLiveError(h,"snapshot structure is too small"); return AMBER_BUFFER_TOO_SMALL; }
-    if(out->version!=AMBER_OUTPUT_SNAPSHOT_VERSION_1 || !ReservedZero(out->reserved,4)) { SetLiveError(h,"snapshot version or reserved input is invalid"); return AMBER_MALFORMED_CONFIGURATION; }
+    if(out->version!=AMBER_OUTPUT_SNAPSHOT_VERSION_1) return LiveFailure(h,AMBER_INVALID_ARGUMENT,"unsupported output snapshot structure version");
+    if(!ReservedZero(out->reserved,4)) return LiveFailure(h,AMBER_MALFORMED_CONFIGURATION,"output snapshot reserved input fields must be zero");
     std::memset(out,0,sizeof(*out)); out->struct_size=sizeof(*out); out->version=AMBER_OUTPUT_SNAPSHOT_VERSION_1;
     const uint32_t native_size=h->exports.snapshot_size(); if(native_size!=sizeof(PA2_OutputSnapshot)) { SetLiveError(h,"maintained output snapshot size is incompatible"); return AMBER_INTERNAL_ERROR; }
-    std::vector<uint8_t> storage(native_size); uint32_t got=h->exports.snapshot(storage.data(),native_size); auto* n=reinterpret_cast<const PA2_OutputSnapshot*>(storage.data());
-    if(got!=native_size || n->SizeBytes!=native_size || n->Version!=PA2_OUTPUT_SNAPSHOT_VERSION || n->MatrixLampCount<512 || n->ReelCount<8 || n->LedCount<256) { SetLiveError(h,"maintained output snapshot returned malformed size, version, or counts"); return AMBER_INTERNAL_ERROR; }
+    PA2_OutputSnapshot native{}; uint32_t got=h->exports.snapshot(&native,sizeof(native)); const auto* n=&native;
+    if(got!=native_size || n->SizeBytes!=native_size || n->Version!=PA2_OUTPUT_SNAPSHOT_VERSION || n->MatrixLampCount<512 || n->ReelCount<8 || n->AlphaSegmentedDisplayCount<1 || n->LedCount<256) { SetLiveError(h,"maintained output snapshot returned malformed size, version, or counts"); return AMBER_INTERNAL_ERROR; }
     out->matrix_lamp_count=512; out->reel_count=8; out->alpha_display_count=1; out->seven_segment_display_count=16;
-    for(uint32_t i=0;i<512;i++) { out->matrix_lamps[i].is_on=n->MatrixLamps[i].OnOff?1u:0u; if(!Q16(n->MatrixLamps[i].Brightness,out->matrix_lamps[i].brightness_q16_16)) goto nonfinite; }
+    for(uint32_t i=0;i<512;i++) { out->matrix_lamps[i].is_on=n->MatrixLamps[i].OnOff?1u:0u; if(!amber_v2::ToQ16_16(n->MatrixLamps[i].Brightness,out->matrix_lamps[i].brightness_q16_16)) goto nonfinite; }
     for(uint32_t i=0;i<8;i++) out->reel_positions[i]=n->Reels[i].Position;
-    for(uint32_t i=0;i<16;i++) { out->alpha_displays[0].segment_masks[i]=n->AlphaSegmented[0].Segments[i]; uint8_t d=n->AlphaSegmented[0].DotComma[i]; out->alpha_displays[0].dot_comma[i]=d==46?AMBER_ALPHA_DECIMAL_POINT:d==44?AMBER_ALPHA_COMMA_TAIL:0; }
-    if(!Q16(n->AlphaSegmented[0].Brightness,out->alpha_displays[0].brightness_q16_16)) goto nonfinite;
-    for(uint32_t d=0;d<16;d++) { float maximum=0; uint32_t mask=0; for(uint32_t s=0;s<8;s++) { const auto& cell=n->Leds[d*16+s]; mask=(mask<<1)|(cell.OnOff?1u:0u); if(cell.Brightness>maximum) maximum=cell.Brightness; } out->seven_segment_displays[d].segment_mask=mask; if(!Q16(maximum,out->seven_segment_displays[d].brightness_q16_16)) goto nonfinite; }
+    if(!amber_v2::ConvertAlpha(n->AlphaSegmented[0].Segments,n->AlphaSegmented[0].DotComma,n->AlphaSegmented[0].Brightness,out->alpha_displays[0])) goto nonfinite;
+    { uint32_t on[256]{}; double brightness[256]{}; for(uint32_t i=0;i<256;i++) { on[i]=n->Leds[i].OnOff; brightness[i]=n->Leds[i].Brightness; } if(!amber_v2::ConvertSevenSegmentPlane(on,brightness,out->seven_segment_displays)) goto nonfinite; }
     return AMBER_OK;
 nonfinite: std::memset(out,0,sizeof(*out)); out->struct_size=sizeof(*out); out->version=AMBER_OUTPUT_SNAPSHOT_VERSION_1; SetLiveError(h,"maintained snapshot contains non-finite brightness"); return AMBER_INTERNAL_ERROR;
 }
 AMBER_WRAP2(GetOutputSnapshot,(AmberHandle h,AmberOutputSnapshotV1* s),SnapshotImpl(h,s))
 
 AmberResult AudioFormatImpl(AmberHandle h,AmberAudioFormatV1* out) { if(!IsLive(h)) return InvalidHandle(); if(!Operational(h,"GetAudioFormat")) return AMBER_INVALID_STATE; if(!(h->capabilities&AMBER_CAP_AUDIO)) return Unsupported(h,"audio");
-    if(!out) { SetLiveError(h,"audio format pointer is null"); return AMBER_INVALID_ARGUMENT; } if(out->struct_size<sizeof(*out)) return AMBER_BUFFER_TOO_SMALL; if(out->version!=AMBER_AUDIO_FORMAT_VERSION_1 || !ReservedZero(out->reserved,2)) return AMBER_MALFORMED_CONFIGURATION;
+    if(!out) return LiveFailure(h,AMBER_INVALID_ARGUMENT,"audio format pointer is null");
+    if(out->struct_size<sizeof(*out)) return LiveFailure(h,AMBER_BUFFER_TOO_SMALL,"audio format structure is too small");
+    if(out->version!=AMBER_AUDIO_FORMAT_VERSION_1) return LiveFailure(h,AMBER_INVALID_ARGUMENT,"unsupported audio format structure version");
+    if(!ReservedZero(out->reserved,2)) return LiveFailure(h,AMBER_MALFORMED_CONFIGURATION,"audio format reserved input fields must be zero");
     std::memset(out,0,sizeof(*out)); out->struct_size=sizeof(*out); out->version=AMBER_AUDIO_FORMAT_VERSION_1; PA2_AudioFormat n{}; uint32_t got=h->exports.audio_format(&n,sizeof(n));
     if(got!=sizeof(n)||n.SizeBytes!=sizeof(n)||n.Version!=PA2_AUDIO_FORMAT_VERSION||n.SampleRate!=48000||n.Channels!=2||n.BitsPerSample!=16||n.Format!=PA2_AUDIO_FORMAT_PCM_S16) { SetLiveError(h,"maintained audio format is incompatible with PCM S16 stereo 48 kHz"); return AMBER_INTERNAL_ERROR; }
     out->sample_rate=48000; out->channels=2; out->sample_format=AMBER_AUDIO_SAMPLE_PCM_S16; out->interleaving=AMBER_AUDIO_INTERLEAVED; return AMBER_OK; }
 AMBER_WRAP2(GetAudioFormat,(AmberHandle h,AmberAudioFormatV1* f),AudioFormatImpl(h,f))
 AmberResult FramesImpl(AmberHandle h,int16_t* samples,uint32_t capacity,uint32_t* written) { if(!written) { if(IsLive(h)) SetLiveError(h,"frames_written pointer is null"); return AMBER_INVALID_ARGUMENT; } *written=0; if(!IsLive(h)) return InvalidHandle(); if(!Operational(h,"FillAudioFrames")) return AMBER_INVALID_STATE; if(!(h->capabilities&AMBER_CAP_AUDIO)) return Unsupported(h,"audio");
-    if(capacity==0) return AMBER_OK; if(!samples) { SetLiveError(h,"audio sample buffer is null for nonzero capacity"); return AMBER_INVALID_ARGUMENT; } if((reinterpret_cast<uintptr_t>(samples)%alignof(int16_t))!=0 || capacity>UINT32_MAX/4u || static_cast<size_t>(capacity)>SIZE_MAX/(2u*sizeof(int16_t))) { SetLiveError(h,"audio frame capacity or alignment is invalid"); return AMBER_INVALID_RANGE; }
+    if(capacity==0) return AMBER_OK; if(!samples) return LiveFailure(h,AMBER_INVALID_ARGUMENT,"audio sample buffer is null for nonzero capacity");
+    if((reinterpret_cast<uintptr_t>(samples)%alignof(int16_t))!=0) return LiveFailure(h,AMBER_INVALID_ARGUMENT,"audio sample buffer is not aligned for int16_t");
+    uint32_t sample_count=0, byte_count=0;
+    if(!amber_v2::AudioExtent(capacity,2,sample_count,byte_count)) return LiveFailure(h,AMBER_INVALID_RANGE,"audio capacity overflows the contract's 32-bit sample or byte count");
     uint32_t got=h->exports.audio_frames(samples,capacity); if(got>capacity) { SetLiveError(h,"maintained audio export returned more frames than requested"); return AMBER_INTERNAL_ERROR; } *written=got; return AMBER_OK; }
 AMBER_WRAP2(FillAudioFrames,(AmberHandle h,int16_t* s,uint32_t c,uint32_t* w),FramesImpl(h,s,c,w))
 
 AmberResult ReelsImpl(AmberHandle h,const AmberReelConfigurationV1* c) { if(!IsLive(h)) return InvalidHandle(); if(!Operational(h,"ConfigureReels")) return AMBER_INVALID_STATE; if(!(h->capabilities&AMBER_CAP_REEL_CONFIGURATION)) return Unsupported(h,"reel configuration");
-    if(!c) return AMBER_INVALID_ARGUMENT; if(c->struct_size<sizeof(*c)) return AMBER_BUFFER_TOO_SMALL; bool valid=c->version==AMBER_REEL_CONFIGURATION_VERSION_1&&c->reel_count==AMBER_MAX_REELS&&(c->apply_mask&~0xffu)==0;
+    if(!c) return LiveFailure(h,AMBER_INVALID_ARGUMENT,"reel configuration pointer is null");
+    if(c->struct_size<sizeof(*c)) return LiveFailure(h,AMBER_BUFFER_TOO_SMALL,"reel configuration structure is too small");
+    if(c->version!=AMBER_REEL_CONFIGURATION_VERSION_1) return LiveFailure(h,AMBER_INVALID_ARGUMENT,"unsupported reel configuration structure version");
+    bool valid=c->reel_count==AMBER_MAX_REELS&&(c->apply_mask&~0xffu)==0;
     for(uint32_t i=0;i<8&&valid;i++) if(c->apply_mask&(1u<<i)) { const auto&r=c->reels[i]; valid=r.reel_index==i&&r.enabled<=1&&r.steps>=1&&r.steps<=255&&r.opto_start<=255&&r.opto_end<=255&&r.opto_invert<=1&&r.opto_start<=r.opto_end; }
-    if(!valid) { SetLiveError(h,"malformed reel aggregate: check version, count, mask, indexes, booleans, steps, and opto ordering"); return AMBER_MALFORMED_CONFIGURATION; } ApplyReels(h,*c); h->reel_config=*c; h->has_reel_config=true; return AMBER_OK; }
+    if(!valid) return LiveFailure(h,AMBER_MALFORMED_CONFIGURATION,"malformed reel aggregate: check count, mask, indexes, booleans, steps, and opto ordering");
+    ApplyReels(h,*c);
+    amber_v2::MergeReels(h->reel_config,h->has_reel_config,*c); return AMBER_OK; }
 AMBER_WRAP2(ConfigureReels,(AmberHandle h,const AmberReelConfigurationV1* c),ReelsImpl(h,c))
 
 AmberResult CoinsImpl(AmberHandle h,const AmberCoinConfigurationV1* c) { if(!IsLive(h)) return InvalidHandle(); if(!Operational(h,"ConfigureCoins")) return AMBER_INVALID_STATE; if(!(h->capabilities&AMBER_CAP_COIN_CONFIGURATION)) return Unsupported(h,"coin configuration");
-    if(!c) return AMBER_INVALID_ARGUMENT; if(c->struct_size<sizeof(*c)) return AMBER_BUFFER_TOO_SMALL; bool valid=c->version==AMBER_COIN_CONFIGURATION_VERSION_1&&(c->channel_apply_mask&~0x3fu)==0&&(c->route_apply_mask&~0xffu)==0&&(c->configuration_flags&~AMBER_COIN_CONFIG_APPLY_LOCKOUT_PORT)==0&&c->reserved==0;
+    if(!c) return LiveFailure(h,AMBER_INVALID_ARGUMENT,"coin configuration pointer is null");
+    if(c->struct_size<sizeof(*c)) return LiveFailure(h,AMBER_BUFFER_TOO_SMALL,"coin configuration structure is too small");
+    if(c->version!=AMBER_COIN_CONFIGURATION_VERSION_1) return LiveFailure(h,AMBER_INVALID_ARGUMENT,"unsupported coin configuration structure version");
+    bool valid=(c->channel_apply_mask&~0x3fu)==0&&(c->route_apply_mask&~0xffu)==0&&(c->configuration_flags&~AMBER_COIN_CONFIG_APPLY_LOCKOUT_PORT)==0&&c->reserved==0;
     if(valid&&(c->configuration_flags&AMBER_COIN_CONFIG_APPLY_LOCKOUT_PORT)) valid=c->lockout_port_base<=255&&c->lockout_port_value<=255;
     for(uint32_t i=0;i<6&&valid;i++) if(c->channel_apply_mask&(1u<<i)) { const auto&x=c->channels[i]; valid=x.channel_index==i&&x.enabled<=1&&x.value<=255&&x.lockout_invert<=1&&x.reserved==0; }
     for(uint32_t i=0;i<8&&valid;i++) if(c->route_apply_mask&(1u<<i)) { const auto&x=c->routes[i]; valid=x.route_index==i&&x.enabled<=1&&x.port_index<=7&&x.coin_code<=255&&x.level<=255&&x.full_level<=255; }
-    if(!valid) { SetLiveError(h,"malformed coin aggregate: check masks, flags, indexes, booleans, byte ranges, port index, and reserved fields"); return AMBER_MALFORMED_CONFIGURATION; } ApplyCoins(h,*c); h->coin_config=*c; h->has_coin_config=true; return AMBER_OK; }
+    if(!valid) return LiveFailure(h,AMBER_MALFORMED_CONFIGURATION,"malformed coin aggregate: check masks, flags, indexes, booleans, byte ranges, port index, and reserved fields");
+    ApplyCoins(h,*c);
+    amber_v2::MergeCoins(h->coin_config,h->has_coin_config,*c); return AMBER_OK; }
 AMBER_WRAP2(ConfigureCoins,(AmberHandle h,const AmberCoinConfigurationV1* c),CoinsImpl(h,c))
 AmberResult PercentImpl(AmberHandle h,uint32_t value) { if(!IsLive(h)) return InvalidHandle(); if(!Operational(h,"SetPercentageSwitch")) return AMBER_INVALID_STATE; if(!(h->capabilities&AMBER_CAP_PERCENT_SWITCH)) return Unsupported(h,"percentage switch"); if(value>15) { SetLiveError(h,"percentage switch raw value must be 0..15"); return AMBER_INVALID_RANGE; } h->exports.percent((uint8_t)value); h->percentage=(uint8_t)value; h->has_percentage=true; return AMBER_OK; }
 AMBER_WRAP2(SetPercentageSwitch,(AmberHandle h,uint32_t v),PercentImpl(h,v))

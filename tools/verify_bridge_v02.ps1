@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-Builds and verifies Amber Bridge v0.1 in Debug and Release x64.
+Builds and verifies Amber Bridge v0.2 in Debug and Release x64.
 .DESCRIPTION
 Omit ROM parameters for loader-only verification. Program and sound ROM slots
 must each be consecutive from slot 1; trailing slots may be omitted.
@@ -75,10 +75,11 @@ foreach ($configuration in @('Debug','Release')) {
     $v1Output = & $diagnostic 2>&1
     if ($LASTEXITCODE -ne 0) { throw "$configuration v1 loader diagnostic failed" }
     if (($v1Output -join "`n") -notmatch 'version 0x00010000, size 80') { throw "v1 table layout check failed" }
+    if (($v1Output -join "`n") -notmatch 'API version: 0x00010000') { throw "v1 bridge-info compatibility check failed" }
     $v2Output = & $diagnostic --v2 2>&1
     if ($LASTEXITCODE -ne 0) { throw "$configuration v2 loader diagnostic failed" }
     if (($v2Output -join "`n") -notmatch 'version 0x00020000, size 144') { throw "v2 table layout check failed" }
-    if (($v2Output -join "`n") -notmatch 'Capabilities:') { throw "v2 capability check failed" }
+    if (($v2Output -join "`n") -notmatch 'Capabilities: 0x000000000000003f') { throw "v2 full System 6 capability mask check failed" }
     if ($runtimeArgs.Count -gt 0) {
         & $diagnostic @runtimeArgs
         if ($LASTEXITCODE -ne 0) { throw "$configuration v1 runtime diagnostic failed" }

@@ -32,7 +32,7 @@ All output storage is caller-owned and remains valid only according to caller st
 
 ## Errors
 
-V1 result declarations remain unchanged. Proposed values are append-only: `AMBER_NOT_SUPPORTED=11` for a feature absent from the selected core, `AMBER_INVALID_RANGE=12` for a validly shaped scalar/index outside its domain, and `AMBER_MALFORMED_CONFIGURATION=13` for inconsistent aggregate content or nonzero reserved input. Existing `AMBER_INVALID_ARGUMENT`, `AMBER_INVALID_STATE`, and `AMBER_BUFFER_TOO_SMALL` retain their meanings. Audio silence/idle is successful, not an error. Every failure sets text retrievable with the v1-prefix `GetLastError`; failed aggregate configuration makes no changes.
+V1 result declarations remain unchanged. Values are append-only: `AMBER_NOT_SUPPORTED=11` for a feature absent from the selected core, `AMBER_INVALID_RANGE=12` for a validly shaped scalar/index outside its domain, and `AMBER_MALFORMED_CONFIGURATION=13` for inconsistent aggregate content or nonzero reserved input. Existing `AMBER_INVALID_ARGUMENT`, `AMBER_INVALID_STATE`, and `AMBER_BUFFER_TOO_SMALL` retain their meanings. Audio silence/idle is successful, not an error. Every failure sets text retrievable with the v1-prefix `GetLastError`; failed aggregate configuration makes no changes.
 
 ## x64 natural layouts
 
@@ -57,3 +57,7 @@ The contract test compiles these assertions as C11 and C++17 and checks the pref
 ## Deferred functionality
 
 Mars `CoinIn`/`MarsCoinIn`, direct diagnostic switch aliases, meters/tubes/hoppers, coin-entry lamps, filament RGB, dot displays, save states, and other PA2-wide snapshot categories are deliberately absent. They are either not required by AB2, not populated for System 6, or need further frontend semantics. V2 does not promise runtime support until a later implementation change explicitly negotiates it.
+
+## Bridge information compatibility policy
+
+`AmberBridgeInfo` remains the v1 bridge-information contract for compatibility with the released Oasis v0.1.1 wrapper. Its `api_version` remains `AMBER_API_VERSION_1` and its product string remains `0.1.1`, regardless of which table calls it. The authoritative negotiated API version is the `api_version` member of the returned 80-byte or 144-byte table. This avoids conflating the legacy product-information record with table negotiation.

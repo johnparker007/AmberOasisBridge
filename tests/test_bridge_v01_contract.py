@@ -39,6 +39,12 @@ class BridgeV01ContractTests(unittest.TestCase):
         self.assertIn("if (!api) return AMBER_INVALID_ARGUMENT", self.bridge)
         self.assertIn("version==AMBER_API_VERSION_1", self.bridge)
         self.assertIn("size<sizeof(AmberApiV1)", self.bridge)
+
+    def test_oasis_v011_bridge_info_version_validation_remains_compatible(self):
+        implementation = self.bridge[self.bridge.index("AmberResult BridgeInfoImpl"):]
+        implementation = implementation[:implementation.index("AmberResult AMBER_CALL BridgeInfo")]
+        self.assertIn("info->api_version = AMBER_API_VERSION_1", implementation)
+        self.assertIn('info->bridge_version = "0.1.1"', implementation)
         self.assertIn("std::memcpy(api,&value,sizeof(value))", self.bridge)
 
     def test_only_amber_get_api_is_declared_as_a_public_export(self):
