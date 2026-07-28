@@ -37,7 +37,7 @@ class BridgeV01ContractTests(unittest.TestCase):
 
     def test_amber_get_api_negotiates_version_and_size(self):
         self.assertIn("if (!api) return AMBER_INVALID_ARGUMENT", self.bridge)
-        self.assertIn("version!=AMBER_API_VERSION_1", self.bridge)
+        self.assertIn("version==AMBER_API_VERSION_1", self.bridge)
         self.assertIn("size<sizeof(AmberApiV1)", self.bridge)
         self.assertIn("std::memcpy(api,&value,sizeof(value))", self.bridge)
 
@@ -91,9 +91,9 @@ class BridgeV01ContractTests(unittest.TestCase):
         self.assertIn("catch (const std::exception&", exported)
         self.assertIn("catch (...)", exported)
 
-    def test_no_v02_capabilities_in_public_api(self):
-        for forbidden in ["Lamp", "Reel", "Display", "Audio", "Snapshot", "Input", "Persistence"]:
-            self.assertNotIn(forbidden, self.api)
+    def test_v1_prefix_remains_first_in_v2_production_api(self):
+        self.assertLess(self.api.index("typedef struct AmberApiV1"), self.api.index("typedef struct AmberApiV2"))
+        self.assertIn("Exact AmberApiV1 prefix", self.api)
 
     def test_nominmax_precedes_windows_header_in_bridge_translation_units(self):
         for name, source in [("AmberBridge.cpp", self.bridge),

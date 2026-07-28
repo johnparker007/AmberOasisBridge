@@ -1,6 +1,6 @@
 # API v2 capabilities and observable data
 
-`AmberCapabilitiesV1.feature_bits` is a 64-bit, versioned mask returned for an already-created instance. The System 6 adapter is designed to report all six currently defined bits: switch input, output snapshot, audio, reel configuration, coin configuration, and percentage switch. Unknown bits are ignored by clients. `max_switches` is 256 for System 6; other limits are ABI constants in the proposal header and actual output counts come from each snapshot.
+`AmberCapabilitiesV1.feature_bits` is a 64-bit, versioned mask returned for an already-created instance. The System 6 adapter reports when all corresponding optional exports resolve all six currently defined bits: switch input, output snapshot, audio, reel configuration, coin configuration, and percentage switch. Unknown bits are ignored by clients. `max_switches` is 256 for System 6; other limits are ABI constants in the production header and actual output counts come from each snapshot.
 
 A function is present even when its bit is clear and then returns `AMBER_NOT_SUPPORTED`. Capability absence is distinct from `AMBER_UNSUPPORTED_VERSION`, which applies only to `AmberGetApi` negotiation or an independently versioned structure.
 

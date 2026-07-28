@@ -61,7 +61,8 @@ int wmain(int argc,wchar_t** wide_argv) {
     std::wprintf(L"AmberBridge.dll: %ls\n",bridge_path.c_str());
     HMODULE bridge=LoadLibraryExW(bridge_path.c_str(),nullptr,LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR|LOAD_LIBRARY_SEARCH_SYSTEM32);
     if(!bridge){DWORD e=GetLastError();std::fwprintf(stderr,L"Failed to load bridge:\n%ls\nWindows error %lu: %ls\n",bridge_path.c_str(),e,SystemMessage(e).c_str());return 1;}
-    int exit_code=1; AmberHandle handle=nullptr; bool initialised=false; AmberApiV1 api{};
+    int exit_code=1; AmberHandle handle=nullptr; bool initialised=false; AmberApiV1 api{}; AmberApiV2 api2{};
+    bool use_v2=false; for(int i=1;i<argc;i++) if(std::wcscmp(wide_argv[i],L"--v2")==0) use_v2=true;
     auto get_api=reinterpret_cast<decltype(&AmberGetApi)>(GetProcAddress(bridge,"AmberGetApi"));
     if(!get_api){DWORD e=GetLastError();std::fprintf(stderr,"AmberGetApi resolution failed. Windows error %lu\n",e);goto cleanup;}
     {
@@ -74,20 +75,24 @@ int wmain(int argc,wchar_t** wide_argv) {
             std::fputs("API negotiation contract probes failed\n",stderr); goto cleanup;
         }
         for(size_t i=sizeof(AmberApiV1);i<sizeof(oversized);++i)if(oversized[i]!=0xA5){std::fputs("API negotiation overwrote the caller tail\n",stderr);goto cleanup;}
-        AmberResult result=get_api(AMBER_API_VERSION_1,sizeof(api),&api);
+        AmberResult result=use_v2?get_api(AMBER_API_VERSION_2,sizeof(api2),&api2):get_api(AMBER_API_VERSION_1,sizeof(api),&api);
+        if(use_v2) std::memcpy(&api,&api2,sizeof(api));
         if(result!=AMBER_OK){std::fprintf(stderr,"API negotiation failed (%u)\n",static_cast<unsigned>(result));goto cleanup;}
+        std::printf("Returned API table: version 0x%08x, size %u\n",api.api_version,api.struct_size);
         AmberBridgeInfo info{sizeof(info)}; AmberCoreInfo core{sizeof(core)};
         if((result=api.GetBridgeInfo(&info))!=AMBER_OK){PrintApiError(api,nullptr,"GetBridgeInfo",result);goto cleanup;}
         std::printf("Amber Bridge version: %s\nAPI version: 0x%08x\n",info.bridge_version,info.api_version);
         if((result=api.EnumerateCore(0,&core))!=AMBER_OK){PrintApiError(api,nullptr,"EnumerateCore",result);goto cleanup;}
         std::printf("Core: %s (%s)\n",core.core_id,core.display_name);
         if((result=api.Create(core.core_id,&handle))!=AMBER_OK){PrintApiError(api,nullptr,"Create",result);goto cleanup;}
+        if(use_v2) { AmberCapabilitiesV1 caps{sizeof(caps),AMBER_CAPABILITIES_VERSION_1}; result=api2.GetCapabilities(handle,&caps); if(result!=AMBER_OK){PrintApiError(api,handle,"GetCapabilities",result);goto cleanup;} std::printf("Capabilities: 0x%016llx; max switches: %u\n",static_cast<unsigned long long>(caps.feature_bits),caps.max_switches); }
         { AmberHandle second=nullptr; if(api.Create(core.core_id,&second)!=AMBER_INSTANCE_LIMIT||second!=nullptr){std::fputs("One-instance policy probe failed\n",stderr);goto cleanup;} }
         std::wprintf(L"JPM DLL: %ls\n",core_path.c_str()); std::puts("Required JPM exports: resolved successfully");
         if(argc>1) {
             uint32_t steps=100; if(!ParseSteps(steps))goto cleanup;
             std::vector<std::string> program_args, sound_args;
             for(int i=1;i<argc;++i) {
+                if(std::wcscmp(wide_argv[i],L"--v2")==0) continue;
                 bool program=std::wcscmp(wide_argv[i],L"--program-rom")==0;
                 bool sound=std::wcscmp(wide_argv[i],L"--sound-rom")==0;
                 if((!program&&!sound)||++i>=argc){std::fputs("Usage: AmberBridgeDiagnostic [--program-rom PATH]... [--sound-rom PATH]...\n",stderr);goto cleanup;}
@@ -103,9 +108,17 @@ int wmain(int argc,wchar_t** wide_argv) {
             for(size_t i=0;i<sound_args.size();++i)params.sound_roms[i]=sound_args[i].c_str();
             result=api.Initialise(handle,&params); std::printf("Initialise result: %u\n",static_cast<unsigned>(result));
             if(result!=AMBER_OK){PrintApiError(api,handle,"Initialise",result);goto cleanup;} initialised=true;
+            if(use_v2) {
+                if((result=api.Reset(handle))!=AMBER_OK){PrintApiError(api,handle,"Reset",result);goto cleanup;}
+                if(api2.SetPercentageSwitch(handle,0)!=AMBER_OK) std::puts("Percentage switch unavailable");
+                if((result=api2.SetSwitchState(handle,0,1))==AMBER_OK) result=api2.SetSwitchState(handle,0,0);
+                if(result!=AMBER_OK){PrintApiError(api,handle,"SetSwitchState",result);goto cleanup;}
+            }
             int32_t ran=0; std::printf("Requested Run value: %u\n",steps); result=api.Run(handle,steps,&ran);
             std::printf("Run result: %u; core-reported result: %d\n",static_cast<unsigned>(result),ran);
             if(result!=AMBER_OK){PrintApiError(api,handle,"Run",result);goto cleanup;}
+            if(use_v2) { AmberOutputSnapshotV1 snap{}; snap.struct_size=sizeof(snap); snap.version=AMBER_OUTPUT_SNAPSHOT_VERSION_1; result=api2.GetOutputSnapshot(handle,&snap); if(result==AMBER_OK) std::printf("Snapshot: lamps=%u reels=%u alpha=%u seven-segment=%u; reel0=%d\n",snap.matrix_lamp_count,snap.reel_count,snap.alpha_display_count,snap.seven_segment_display_count,snap.reel_positions[0]); else PrintApiError(api,handle,"GetOutputSnapshot",result);
+                AmberAudioFormatV1 fmt{}; fmt.struct_size=sizeof(fmt); fmt.version=AMBER_AUDIO_FORMAT_VERSION_1; result=api2.GetAudioFormat(handle,&fmt); if(result==AMBER_OK) { int16_t samples[128]{}; uint32_t written=0; result=api2.FillAudioFrames(handle,samples,64,&written); std::printf("Audio: %u Hz, %u channels, %u frames\n",fmt.sample_rate,fmt.channels,written); } }
             result=api.Shutdown(handle); std::printf("Shutdown result: %u\n",static_cast<unsigned>(result));
             if(result!=AMBER_OK){PrintApiError(api,handle,"Shutdown",result);goto cleanup;} initialised=false;
         }

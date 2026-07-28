@@ -1,12 +1,12 @@
 # Amber Bridge API v2 design contract
 
-> **Status: design only.** `amber_api_v2_proposal.h` is compile-checkable specification material. The production `AmberGetApi` still supports only v1; `AMBER_API_VERSION_CURRENT` remains v1.
+> **Status: implemented.** API v2 is active in `AmberGetApi`; `AMBER_API_VERSION_CURRENT` is v2, while v1 remains supported unchanged.
 
 ## Public declaration and negotiation
 
-The complete proposed C declaration is `include/amber/amber_api_v2_proposal.h`. Semantic API 2 is encoded as `AMBER_API_VERSION_2 == 0x00020000u`, following v1's major-in-bits-16..31 convention. A client requests exactly that value and passes a zero-filled `AmberApiV2` whose `struct_size` is `sizeof(AmberApiV2)`.
+The complete production C declaration is `include/amber/amber_api.h`. Semantic API 2 is encoded as `AMBER_API_VERSION_2 == 0x00020000u`, following v1's major-in-bits-16..31 convention. A client requests exactly that value and passes a zero-filled `AmberApiV2` whose `struct_size` is `sizeof(AmberApiV2)`.
 
-V2 repeats (does not embed) the complete 80-byte `AmberApiV1` prefix, followed by eight functions. This lets a v2 client use lifecycle calls from one 144-byte table while leaving the type and bytes of `AmberApiV1` untouched. On eventual implementation, `AmberGetApi` shall:
+V2 repeats (does not embed) the complete 80-byte `AmberApiV1` prefix, followed by eight functions. This lets a v2 client use lifecycle calls from one 144-byte table while leaving the type and bytes of `AmberApiV1` untouched. `AmberGetApi` now:
 
 1. reject unknown versions with `AMBER_UNSUPPORTED_VERSION`;
 2. require `api != NULL` and `api_size >= 144` for v2 (`AMBER_BUFFER_TOO_SMALL` otherwise);

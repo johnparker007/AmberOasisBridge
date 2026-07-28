@@ -88,12 +88,12 @@ class BridgeV2DesignTests(unittest.TestCase):
     def test_proposed_header_compiles_as_cpp17_and_matches_x64_layout(self):
         self._compile("c++", ".cpp", "-std=c++17")
 
-    def test_proposal_is_not_advertised_by_production_headers_or_bridge(self):
+    def test_v2_is_advertised_by_production_headers_and_bridge(self):
         version = (ROOT / "include/amber/amber_version.h").read_text()
         bridge = (ROOT / "src/Bridge/AmberBridge.cpp").read_text()
-        self.assertIn("AMBER_API_VERSION_CURRENT AMBER_API_VERSION_1", version)
-        self.assertNotIn("AMBER_API_VERSION_2", bridge)
-        self.assertNotIn("AmberApiV2", bridge)
+        self.assertIn("AMBER_API_VERSION_CURRENT AMBER_API_VERSION_2", version)
+        self.assertIn("AMBER_API_VERSION_2", bridge)
+        self.assertIn("AmberApiV2", bridge)
 
     def test_seven_segment_brightness_rule_is_fully_specified(self):
         contract = (ROOT / "docs/architecture/bridge-v2-capabilities.md").read_text()
