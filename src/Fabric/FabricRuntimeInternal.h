@@ -24,4 +24,6 @@ private:
 /* Composition root hook: adapters are registered explicitly, not discovered globally. */
 FabricResult FabricRegisterBackendProvider(FabricRuntime *runtime,
                                            std::unique_ptr<fabric::FabricBackendProvider> provider) noexcept;
+
+namespace fabric { std::unique_ptr<FabricBackendProvider> MakeAmberBackendProvider(); }
 #endif

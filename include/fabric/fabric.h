@@ -22,6 +22,8 @@ extern "C" {
 #define FABRIC_PATH_CAPACITY 1024u
 #define FABRIC_ERROR_CAPACITY 512u
 #define FABRIC_INDEX_UNAVAILABLE INT32_C(-1)
+#define FABRIC_CHARACTER_CAPACITY 16u
+#define FABRIC_SEGMENT_DIGIT_CAPACITY 16u
 
 typedef struct FabricRuntime FabricRuntime;
 typedef struct FabricMachineSession FabricMachineSession;
@@ -58,7 +60,25 @@ typedef struct FabricLaunchRequest {
     const void *machine_configuration;
     uint32_t machine_configuration_size;
     uint32_t reserved;
+    /* Append-only v1 extension. Prefer typed resources when non-null. */
+    const struct FabricRomResource *rom_resources;
+    uint32_t rom_resource_count;
 } FabricLaunchRequest;
+
+typedef enum FabricRomRole {
+    FABRIC_ROM_ROLE_OTHER = 0,
+    FABRIC_ROM_ROLE_PROGRAM = 1,
+    FABRIC_ROM_ROLE_SOUND = 2
+} FabricRomRole;
+
+typedef struct FabricRomResource {
+    uint32_t struct_size;
+    uint32_t struct_version;
+    uint32_t role;
+    uint32_t slot;
+    const char *path;
+    uint64_t reserved[2];
+} FabricRomResource;
 
 typedef struct FabricCapabilities {
     uint32_t struct_size;
@@ -99,8 +119,9 @@ typedef struct FabricCharacterDisplay {
     uint32_t struct_version;
     char identifier[FABRIC_IDENTIFIER_CAPACITY];
     uint32_t character_count;
-    const uint32_t *characters;
-    const uint8_t *attributes;
+    uint32_t character_capacity;
+    uint32_t characters[FABRIC_CHARACTER_CAPACITY];
+    uint8_t attributes[FABRIC_CHARACTER_CAPACITY];
 } FabricCharacterDisplay;
 
 typedef struct FabricSegmentDisplay {
@@ -108,7 +129,8 @@ typedef struct FabricSegmentDisplay {
     uint32_t struct_version;
     char identifier[FABRIC_IDENTIFIER_CAPACITY];
     uint32_t digit_count;
-    const uint64_t *segment_masks;
+    uint32_t digit_capacity;
+    uint64_t segment_masks[FABRIC_SEGMENT_DIGIT_CAPACITY];
 } FabricSegmentDisplay;
 
 /* The caller owns all arrays and sets their capacities before each call. */
@@ -144,6 +166,8 @@ typedef struct FabricAudioFormat {
 
 FABRIC_API FabricResult FabricCreateRuntime(uint32_t requested_version, FabricRuntime **out_runtime);
 FABRIC_API void FabricDestroyRuntime(FabricRuntime *runtime);
+FABRIC_API FabricResult FabricRuntimeGetLastError(FabricRuntime *runtime, char *buffer,
+                                                  uint32_t buffer_size, uint32_t *required_size);
 FABRIC_API FabricResult FabricCreateSession(FabricRuntime *runtime, const FabricLaunchRequest *request,
                                             FabricMachineSession **out_session);
 FABRIC_API void FabricDestroySession(FabricMachineSession *session);

@@ -8,6 +8,8 @@
 
 struct FabricRuntime {
     fabric::RuntimeRegistry registry;
+    std::mutex mutex;
+    std::string last_error;
 };
 
 struct FabricMachineSession {
@@ -33,6 +35,8 @@ template <typename T> bool valid(const T *value) noexcept {
 
 FabricResult remember(FabricMachineSession *session, FabricResult result) noexcept {
     if (result == FABRIC_OK) session->boundary_error.clear();
+    else if (result == FABRIC_INVALID_STATE) session->boundary_error = "operation is invalid in the current session state";
+    else if (result == FABRIC_INVALID_ARGUMENT) session->boundary_error = "invalid argument at Fabric session boundary";
     else session->boundary_error = session->instance->last_error();
     return result;
 }
@@ -88,30 +92,50 @@ FabricResult FabricCreateRuntime(uint32_t requested_version, FabricRuntime **out
     if (!out_runtime) return FABRIC_INVALID_ARGUMENT;
     *out_runtime = nullptr;
     if (requested_version != FABRIC_ABI_VERSION_1) return FABRIC_UNSUPPORTED_VERSION;
-    try { *out_runtime = new FabricRuntime(); return FABRIC_OK; }
+    try {
+        *out_runtime = new FabricRuntime();
+        FabricResult result = FabricRegisterBackendProvider(*out_runtime, fabric::MakeAmberBackendProvider());
+        if (result != FABRIC_OK) { delete *out_runtime; *out_runtime = nullptr; return result; }
+        return FABRIC_OK;
+    }
     catch (...) { return FABRIC_INTERNAL_ERROR; }
 }
 
 void FabricDestroyRuntime(FabricRuntime *runtime) { delete runtime; }
 
+FabricResult FabricRuntimeGetLastError(FabricRuntime *runtime, char *buffer,
+                                       uint32_t buffer_size, uint32_t *required_size) {
+    if (!runtime || !required_size) return FABRIC_INVALID_ARGUMENT;
+    std::lock_guard<std::mutex> lock(runtime->mutex);
+    *required_size = static_cast<uint32_t>(runtime->last_error.size() + 1);
+    if (!buffer || buffer_size < *required_size) return FABRIC_BUFFER_TOO_SMALL;
+    std::memcpy(buffer, runtime->last_error.c_str(), *required_size);
+    return FABRIC_OK;
+}
+
 FabricResult FabricCreateSession(FabricRuntime *runtime, const FabricLaunchRequest *request,
                                  FabricMachineSession **out_session) {
-    if (!runtime || !out_session || !valid(request)) return FABRIC_INVALID_ARGUMENT;
+    if (!runtime || !out_session) return FABRIC_INVALID_ARGUMENT;
+    if (!valid(request)) { std::lock_guard<std::mutex> lock(runtime->mutex); runtime->last_error = "malformed Fabric launch request"; return FABRIC_INVALID_ARGUMENT; }
     *out_session = nullptr;
     if (!terminated(request->backend_kind, sizeof(request->backend_kind)) ||
         !terminated(request->machine_identifier, sizeof(request->machine_identifier)) ||
         !terminated(request->backend_path, sizeof(request->backend_path)) ||
         (request->rom_path_count && !request->rom_paths) ||
-        (request->machine_configuration_size && !request->machine_configuration)) return FABRIC_INVALID_ARGUMENT;
+        (request->machine_configuration_size && !request->machine_configuration) ||
+        (request->rom_resource_count && !request->rom_resources)) {
+        std::lock_guard<std::mutex> lock(runtime->mutex); runtime->last_error = "malformed Fabric launch request"; return FABRIC_INVALID_ARGUMENT;
+    }
     try {
         std::unique_ptr<fabric::FabricBackendInstance> instance;
         std::string error;
         FabricResult result = runtime->registry.create(*request, instance, error);
-        if (result != FABRIC_OK) return result;
-        if (!instance) return FABRIC_INTERNAL_ERROR;
+        if (result != FABRIC_OK) { std::lock_guard<std::mutex> lock(runtime->mutex); runtime->last_error = error; return result; }
+        if (!instance) { std::lock_guard<std::mutex> lock(runtime->mutex); runtime->last_error = "provider returned success without an instance"; return FABRIC_INTERNAL_ERROR; }
         *out_session = new FabricMachineSession(std::move(instance));
+        { std::lock_guard<std::mutex> lock(runtime->mutex); runtime->last_error.clear(); }
         return FABRIC_OK;
-    } catch (...) { return FABRIC_INTERNAL_ERROR; }
+    } catch (...) { std::lock_guard<std::mutex> lock(runtime->mutex); runtime->last_error = "session allocation failed"; return FABRIC_INTERNAL_ERROR; }
 }
 
 void FabricDestroySession(FabricMachineSession *session) { delete session; }

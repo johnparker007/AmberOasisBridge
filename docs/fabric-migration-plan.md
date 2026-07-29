@@ -32,3 +32,7 @@ calls; deterministic cleanup; and the 1 kHz System 6 pump with frame-based audio
 - [x] Preserve the current Amber API, bridge, projects, and core sources.
 - [ ] Implement the Amber DLL provider (next stage).
 - [ ] Modify Oasis, add MAME, or add an IPC/discovery protocol (later stages).
+
+## Current stage
+
+Stage 2 implements the external `amber-api-v2` provider, typed ordered ROMs, translated lifecycle, capabilities, snapshots, audio, and versioned backend configuration. Direct historical Amber core DLL support is not implemented. Oasis integration is the following PR. `src/Cores` and the old bridge remain until parity and migration are proven; MAME remains deferred.
