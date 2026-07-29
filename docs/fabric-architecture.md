@@ -52,4 +52,4 @@ contract tests.
 
 ## Second migration stage
 
-`FabricRuntime` is now a shared library (`FabricRuntime.dll` on Windows) with an exported C ABI. Runtime errors cover failures before session creation. Snapshot display data is inline caller-owned storage. The built-in `amber-api-v2` provider loads only the exact absolute requested path and negotiates `AmberGetApi` v2; historical core-only DLLs are unsupported. Oasis migration follows in the next PR, while `src/Cores` and the old bridge remain. MAME is deferred.
+`FabricRuntime` is a shared library (`FabricRuntime.dll` on Windows) with an exported C ABI. Runtime errors cover failures before session creation. Snapshot display data is inline caller-owned storage. The built-in `amber-api-v2` backend loads only the exact absolute requested path: it uses provider API v2 when `AmberGetApi` exists and otherwise adapts the existing production System 6 exports. No Amber rebuild or ABI change is required, and Amber-specific adapter types remain internal. `src/Cores` and the old bridge remain. MAME is deferred.

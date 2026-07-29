@@ -1,11 +1,22 @@
-# Amber API v2 backend contract
+# Amber backend compatibility contract
 
 The Amber backend is an adapter, not part of Fabric's public machine model. It receives a launch
 request selected by backend and machine identifiers and loads the **exact absolute DLL path supplied by
 the frontend**. It must not search relative directories, substitute `AmberBridge.dll`, choose
 `AmberOasis.JPMSystem6.dll`, or infer a specific Amber platform.
 
-The adapter negotiates exactly Amber API v2 through `AmberGetApi`. DLLs exposing only historical platform/core exports are not compatible. The adapter maps discovered capabilities to extensible Fabric
+Fabric first detects the provider-style API by the single `AmberGetApi` export. If it is absent,
+Fabric deterministically detects the unchanged production/System 6 ABI using `Initialise`,
+`Shutdown`, `Reset`, `Run`, `LoadROM`, `GetOutputSnapshotSize`, `GetOutputSnapshot`,
+`TurnSwitchOn`, and `TurnSwitchOff`. A partially matching DLL is rejected with the exact missing
+symbol, DLL path, adapter, and resolution phase. Amber does **not** need to be rebuilt and does not
+need to export `AmberGetApi`; the compatibility adapter is private to `FabricRuntime`.
+
+The production ABI is the existing `extern "C"`, native C calling-convention interface declared by
+the maintained System 6 bridge. It is a DLL-owned singleton: `Initialise` acquires it and `Shutdown`
+destroys it. ROM paths are borrowed only for the duration of `LoadROM`/`LoadSoundROM`; snapshots and
+audio are copied into caller-owned buffers. Its `PA2_OutputSnapshot` structures use 4-byte packing.
+Optional audio is detected only when both `GetAudioFormat` and `FillAudioFrames` exist. The adapter maps discovered capabilities to extensible Fabric
 flags. It translates Fabric digital input and generic snapshot objects without exposing Amber
 structures. In particular it must retain logical lamp state separately from brightness, preserve
 signed reel positions, translate alpha attributes and seven-segment masks without reinterpretation,
@@ -16,10 +27,12 @@ and unload must have deterministic ordering, including partial-failure cleanup. 
 copied into Fabric-owned boundary text. Exceptions, borrowed Amber pointers, and loader handles never
 cross the C ABI.
 
-Amber cycle counts are adapter-local. For System 6 the adapter must preserve the existing 1 kHz pump
-and derive audio from elapsed time in complete PCM frames, including fractional-frame accumulation;
-Fabric's generic time advance must not redefine that behaviour. Reel, coin, and percentage
-configuration mappings require parity tests before frontend migration.
+Amber cycle counts are adapter-local. System 6 receives 8 MHz CPU-cycle budgets (125 ns per cycle),
+with sub-cycle nanoseconds retained between calls. The flat `Run(UINT32)` return value is the native
+CPU/emulator return value, not a documented progress count or status. Fabric therefore consumes the
+requested budget after one call, accepts zero, and uses the return only for diagnostics. Requests
+larger than `INT32_MAX` are split into bounded calls; provider-style API v2 progress semantics are
+unchanged.
 
 The maintained Amber sources under `src/Cores` and the current bridge remain compatibility assets.
 They will be removed only after the external-DLL implementation reaches behavioural parity and its
@@ -42,4 +55,64 @@ Amber API v2 has a single coherent output-snapshot capability. The adapter inten
 bit to Fabric lamps, reels, character displays, and segment displays because those are the four fixed
 families present in `AmberOutputSnapshotV1`.
 
-This provider consumes Amber API v2 DLLs only; direct historical core DLL support is not implemented. Oasis integration is the following PR. `src/Cores` and the old bridge remain until external-DLL parity and Oasis migration are proven. MAME remains deferred.
+`FakeAmberApiV2` is only a provider-style contract test implementation; it is not the required
+production ABI. `FakeAmberLegacy` deliberately omits `AmberGetApi` and exercises the production
+adapter, including ROM/configuration translation, lifecycle, output, 44.1 kHz stereo PCM16 audio,
+timing remainders, repeated loading, and unloading.
+
+## Using an existing Amber DLL
+
+Keep the backend identifier `amber-api-v2` for Oasis compatibility and set `backend_path` to the
+absolute path of the existing Amber/System 6 DLL. Supply the two program ROMs as typed
+`FABRIC_ROM_ROLE_PROGRAM` slots 0 and 1, and sound ROMs (when used) as contiguous
+`FABRIC_ROM_ROLE_SOUND` slots. Fabric loads that exact path and resolves dependencies from the DLL
+directory and standard controlled Windows loader directories.
+
+Proprietary DLLs and ROMs are never committed. For an opt-in local smoke test, set
+`FABRIC_REAL_AMBER_DLL` to the absolute production DLL path and provide ROM paths through the local
+test harness (program slots 0/1, plus optional sound slots), then run `AmberLegacyBackendTests` or
+the equivalent application lifecycle: create, initialise, reset, advance, snapshot, audio query,
+shutdown, and destroy. CI uses `FakeAmberLegacy` and requires no proprietary files. An absent
+`FABRIC_REAL_AMBER_DLL` is intentionally treated as a skipped local integration test.
+
+Both provider-style API v2 DLLs and direct production core DLLs are supported. `src/Cores` and the
+old bridge remain compatibility assets; MAME remains deferred.
+
+## Production diagnostics and pump contracts
+
+Set `FABRIC_AMBER_TRACE=1` before starting Oasis to emit bounded production-adapter diagnostics to
+an append-only UTF-8 file and, on Windows, the debugger. By default the authoritative file is
+`%TEMP%\fabric-amber-<pid>.log`; set `FABRIC_AMBER_TRACE_FILE` to an absolute path to override it.
+Every line is serialized and flushed immediately. Tracing covers runtime/module identity, session
+requests, adapter selection, initialise, ROM slot filenames, configuration, the first resets, the
+first 16 `Run` calls, the first eight activity summaries, audio-format queries, the first 16 audio
+summaries, shutdown, and destruction. Normal execution creates no file, and traces never contain ROM
+contents or raw audio samples. Native `OutputDebugString` messages may not appear with managed-only
+debugging, so use the file as the authoritative output.
+
+The production reset order is native `Reset`, retained reel configuration, retained coin channels,
+lockout and selected routes, then retained percentage. The same application method is used after ROM
+loading and after every reset; only selected masks are replayed, and disabled reels are not given
+invented settings.
+
+For PowerShell, launch Oasis from the same environment:
+
+```powershell
+$env:FABRIC_AMBER_TRACE = "1"
+$env:FABRIC_AMBER_TRACE_FILE = "$env:TEMP\fabric-amber-oasis.log"
+```
+
+For a Visual Studio project debug profile, add environment entries
+`FABRIC_AMBER_TRACE=1` and `FABRIC_AMBER_TRACE_FILE=%TEMP%\fabric-amber-oasis.log`
+(the native Windows environment expansion syntax used by the Debugging property page). Before a
+production test, remove stale `FabricRuntime.dll` copies and confirm the trace's
+`Fabric runtime module:` line names the newly copied DLL.
+
+The snapshot ABI is the existing pack-4 `PA2_OutputSnapshot` (24,812 bytes). Production System 6
+supplies at least 512 matrix lamps, eight reels, one segmented alpha display, and 256 LED-plane
+entries. Fabric maps these to the same stable 512/8/1/16 output shape used by the established Amber
+bridge; it does not expose the unrelated 40-entry `LedDisplays` array as 40 Fabric displays.
+
+`GetAudioFormat` returns the size of the 24-byte `PA2_AudioFormat`. `FillAudioFrames` receives a
+frame capacity, writes interleaved stereo samples (`frames * channels` samples), and returns frames,
+not samples. Fabric validates the stereo extent and the returned frame count before reporting it.
