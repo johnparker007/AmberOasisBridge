@@ -28,8 +28,16 @@ static_assert(sizeof(PA2_OutputSnapshot) == 24812,
 static_assert(sizeof(PA2_AudioFormat) == 24,
               "production Amber audio ABI size changed");
 bool trace_enabled() noexcept {
+#ifdef _WIN32
+  char value[8]{};
+  const DWORD length =
+      GetEnvironmentVariableA("FABRIC_AMBER_TRACE", value, sizeof(value));
+  return length != 0 && (length >= static_cast<DWORD>(sizeof(value)) ||
+                         length != 1 || value[0] != '0');
+#else
   const char *value = std::getenv("FABRIC_AMBER_TRACE");
   return value && value[0] && std::strcmp(value, "0") != 0;
+#endif
 }
 
 void trace(const std::string &message) noexcept {
