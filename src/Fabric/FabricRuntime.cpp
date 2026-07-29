@@ -1,3 +1,4 @@
+#include "AmberTrace.h"
 #include "FabricRuntimeInternal.h"
 
 #include <algorithm>
@@ -124,6 +125,7 @@ FabricResult FabricRegisterBackendProvider(
 extern "C" {
 FabricResult FabricCreateRuntime(uint32_t requested_version,
                                  FabricRuntime **out_runtime) {
+  fabric::amber_trace::RuntimeStarted();
   if (!out_runtime)
     return FABRIC_INVALID_ARGUMENT;
   *out_runtime = nullptr;
@@ -144,7 +146,10 @@ FabricResult FabricCreateRuntime(uint32_t requested_version,
   }
 }
 
-void FabricDestroyRuntime(FabricRuntime *runtime) { delete runtime; }
+void FabricDestroyRuntime(FabricRuntime *runtime) {
+  fabric::amber_trace::Write("FabricDestroyRuntime entered");
+  delete runtime;
+}
 
 FabricResult FabricRuntimeGetLastError(FabricRuntime *runtime, char *buffer,
                                        uint32_t buffer_size,
@@ -162,6 +167,7 @@ FabricResult FabricRuntimeGetLastError(FabricRuntime *runtime, char *buffer,
 FabricResult FabricCreateSession(FabricRuntime *runtime,
                                  const FabricLaunchRequest *request,
                                  FabricMachineSession **out_session) {
+  fabric::amber_trace::Write("FabricCreateSession entered");
   if (!runtime || !out_session)
     return FABRIC_INVALID_ARGUMENT;
   if (!request || request->struct_size < FABRIC_LAUNCH_REQUEST_V1_MIN_SIZE ||
@@ -195,6 +201,10 @@ FabricResult FabricCreateSession(FabricRuntime *runtime,
     runtime->last_error = "malformed Fabric launch request";
     return FABRIC_INVALID_ARGUMENT;
   }
+  fabric::amber_trace::Write(
+      "Session request: backend kind=" + std::string(normalized.backend_kind) +
+      "; machine identifier=" + std::string(normalized.machine_identifier) +
+      "; configured DLL=" + std::string(normalized.backend_path));
   try {
     std::unique_ptr<fabric::FabricBackendInstance> instance;
     std::string error;
@@ -222,7 +232,10 @@ FabricResult FabricCreateSession(FabricRuntime *runtime,
   }
 }
 
-void FabricDestroySession(FabricMachineSession *session) { delete session; }
+void FabricDestroySession(FabricMachineSession *session) {
+  fabric::amber_trace::Write("FabricDestroySession entered");
+  delete session;
+}
 
 FabricResult FabricSessionInitialise(FabricMachineSession *session) {
   return invoke(session, [session] {

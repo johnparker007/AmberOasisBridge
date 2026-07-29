@@ -69,6 +69,7 @@ int main() {
   c.reels.reel_count = 1;
   c.reels.apply_mask = 1;
   c.reels.reels[0].steps = 9;
+  c.reels.reels[0].enabled = 1;
   c.coins.struct_size = sizeof(c.coins);
   c.coins.version = AMBER_COIN_CONFIGURATION_VERSION_1;
   c.coins.channel_apply_mask = 1;
@@ -117,6 +118,12 @@ int main() {
   CHECK(reels[0].position == 10);
   CHECK(chars[0].characters[0] == 0x1234 && chars[0].attributes[0] == 1);
   CHECK(segments[0].segment_masks[0] == 0x5a);
+  CHECK(lamps[3].brightness == 3.0f && lamps[4].brightness >= 1.0f);
+  CHECK(FabricSessionReset(session) == FABRIC_OK);
+  CHECK(FabricSessionReset(session) == FABRIC_OK);
+  CHECK(FabricSessionGetSnapshot(session, &snap) == FABRIC_OK);
+  CHECK(lamps[1].logical_state == 1 && lamps[1].brightness == 4.0f);
+  CHECK(lamps[3].brightness == 3.0f && lamps[4].brightness >= 3.0f);
   int16_t audio[8]{};
   uint32_t written = 0;
   CHECK(FabricSessionReadAudio(session, audio, 4, &written) == FABRIC_OK);
@@ -144,6 +151,17 @@ int main() {
   CHECK(FabricCreateSession(runtime, &good, &session) == FABRIC_OK);
   CHECK(FabricSessionInitialise(session) == FABRIC_OK);
   CHECK(FabricSessionShutdown(session) == FABRIC_OK);
+  FabricDestroySession(session);
+  auto missing = request(FAKE_AMBER_LEGACY_MISSING_CONFIG_PATH);
+  missing.rom_resources = roms;
+  missing.rom_resource_count = 3;
+  missing.machine_configuration = &c;
+  missing.machine_configuration_size = sizeof(c);
+  session = nullptr;
+  CHECK(FabricCreateSession(runtime, &missing, &session) == FABRIC_OK);
+  CHECK(FabricSessionInitialise(session) == FABRIC_NOT_SUPPORTED);
+  CHECK(session_error(session).find("missing reel export") !=
+        std::string::npos);
   FabricDestroySession(session);
   FabricDestroyRuntime(runtime);
   return 0;

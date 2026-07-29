@@ -1,5 +1,6 @@
 #include "AmberDynamicLibrary.h"
 #include "AmberLegacyAdapter.h"
+#include "AmberTrace.h"
 #include "FabricBackend.h"
 #include "fabric/fabric_amber.h"
 
@@ -455,10 +456,14 @@ public:
       if (!library->open(request.backend_path, error))
         return FABRIC_NOT_FOUND;
       void *get_api_symbol = library->symbol("AmberGetApi");
+      amber_trace::Write(std::string("AmberGetApi present: ") +
+                         (get_api_symbol ? "yes" : "no"));
       if (!get_api_symbol) {
+        amber_trace::Write("selected adapter: production-legacy");
         return CreateLegacyAmberInstance(request, std::move(library), out,
                                          error);
       }
+      amber_trace::Write("selected adapter: provider-v2");
       static_assert(sizeof(GetApi) == sizeof(get_api_symbol),
                     "dynamic function pointer representation");
       GetApi get_api = nullptr;

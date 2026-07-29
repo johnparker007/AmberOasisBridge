@@ -17,6 +17,8 @@ uint8_t switches[256];
 uint8_t reel_steps[PA2_NUM_REELS];
 uint8_t coin_values[16];
 uint8_t percentage;
+uint32_t reset_count;
+uint8_t configuration_stage;
 } // namespace
 
 LEGACY_EXPORT float GetDLLVersion() { return 1.0f; }
@@ -29,7 +31,14 @@ LEGACY_EXPORT uint8_t Shutdown() {
   initialised = false;
   return was ? 1 : 0;
 }
-LEGACY_EXPORT void Reset() { cycles = 0; }
+LEGACY_EXPORT void Reset() {
+  cycles = 0;
+  std::memset(reel_steps, 0, sizeof(reel_steps));
+  std::memset(coin_values, 0, sizeof(coin_values));
+  percentage = 0;
+  configuration_stage = 0;
+  ++reset_count;
+}
 /* Musashi's return is observable legacy information, not the ABI's consumed
  * cycle count. Production cores may validly return zero. */
 LEGACY_EXPORT int32_t Run(uint32_t requested) {
@@ -49,16 +58,26 @@ LEGACY_EXPORT void TurnSwitchOff(uint8_t i) { switches[i] = 0; }
 LEGACY_EXPORT void SetOptoInvert(uint8_t, uint8_t) {}
 LEGACY_EXPORT void SetOptoStart(uint8_t, uint8_t) {}
 LEGACY_EXPORT void SetOptoEnd(uint8_t, uint8_t) {}
+#ifndef FAKE_AMBER_OMIT_SET_STEPS
 LEGACY_EXPORT void SetSteps(uint8_t i, uint8_t value) {
   if (i < PA2_NUM_REELS)
     reel_steps[i] = value;
+  configuration_stage = 1;
 }
+#endif
 LEGACY_EXPORT void SetCoinValue(uint8_t i, uint8_t value) {
   if (i < 16)
     coin_values[i] = value;
+  if (configuration_stage == 1)
+    configuration_stage = 2;
 }
 LEGACY_EXPORT void SetCoinEnable(uint8_t, uint8_t) {}
-LEGACY_EXPORT void SetPercent(uint8_t value) { percentage = value; }
+LEGACY_EXPORT void SetLockoutInvert(uint8_t, uint8_t) {}
+LEGACY_EXPORT void SetPercent(uint8_t value) {
+  percentage = value;
+  if (configuration_stage == 2)
+    configuration_stage = 3;
+}
 LEGACY_EXPORT uint32_t GetOutputSnapshotSize() {
   return sizeof(PA2_OutputSnapshot);
 }
@@ -77,6 +96,8 @@ LEGACY_EXPORT uint32_t GetOutputSnapshot(void *buffer, uint32_t size) {
   s.MatrixLamps[1].OnOff = percentage;
   s.MatrixLamps[1].Brightness = static_cast<float>(coin_values[0]);
   s.MatrixLamps[2].Brightness = static_cast<float>(run_calls);
+  s.MatrixLamps[3].Brightness = static_cast<float>(configuration_stage);
+  s.MatrixLamps[4].Brightness = static_cast<float>(reset_count);
   s.ReelCount = PA2_NUM_REELS;
   s.Reels[0].Position = static_cast<int32_t>(cycles + reel_steps[0]);
   s.AlphaSegmentedDisplayCount = 1;

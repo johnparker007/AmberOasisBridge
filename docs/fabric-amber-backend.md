@@ -81,10 +81,32 @@ old bridge remain compatibility assets; MAME remains deferred.
 ## Production diagnostics and pump contracts
 
 Set `FABRIC_AMBER_TRACE=1` before starting Oasis to emit bounded production-adapter diagnostics to
-the Windows debugger. Tracing covers adapter selection, initialise, ROM loading, configuration,
-the first reset, the first eight `Run` calls, the first snapshot, audio-format queries, the first
-eight audio reads, and shutdown. Normal execution emits no trace, and paths are logged without ROM
-contents or audio samples.
+an append-only UTF-8 file and, on Windows, the debugger. By default the authoritative file is
+`%TEMP%\fabric-amber-<pid>.log`; set `FABRIC_AMBER_TRACE_FILE` to an absolute path to override it.
+Every line is serialized and flushed immediately. Tracing covers runtime/module identity, session
+requests, adapter selection, initialise, ROM slot filenames, configuration, the first resets, the
+first 16 `Run` calls, the first eight activity summaries, audio-format queries, the first 16 audio
+summaries, shutdown, and destruction. Normal execution creates no file, and traces never contain ROM
+contents or raw audio samples. Native `OutputDebugString` messages may not appear with managed-only
+debugging, so use the file as the authoritative output.
+
+The production reset order is native `Reset`, retained reel configuration, retained coin channels,
+lockout and selected routes, then retained percentage. The same application method is used after ROM
+loading and after every reset; only selected masks are replayed, and disabled reels are not given
+invented settings.
+
+For PowerShell, launch Oasis from the same environment:
+
+```powershell
+$env:FABRIC_AMBER_TRACE = "1"
+$env:FABRIC_AMBER_TRACE_FILE = "$env:TEMP\fabric-amber-oasis.log"
+```
+
+For a Visual Studio project debug profile, add environment entries
+`FABRIC_AMBER_TRACE=1` and `FABRIC_AMBER_TRACE_FILE=%TEMP%\fabric-amber-oasis.log`
+(the native Windows environment expansion syntax used by the Debugging property page). Before a
+production test, remove stale `FabricRuntime.dll` copies and confirm the trace's
+`Fabric runtime module:` line names the newly copied DLL.
 
 The snapshot ABI is the existing pack-4 `PA2_OutputSnapshot` (24,812 bytes). Production System 6
 supplies at least 512 matrix lamps, eight reels, one segmented alpha display, and 256 LED-plane
