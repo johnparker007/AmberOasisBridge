@@ -1,0 +1,17 @@
+cmake_minimum_required(VERSION 3.16)
+project(FabricFoundation LANGUAGES CXX)
+
+add_library(FabricRuntime STATIC src/Fabric/FabricRuntime.cpp)
+target_include_directories(FabricRuntime PUBLIC include PRIVATE src/Fabric)
+target_compile_features(FabricRuntime PUBLIC cxx_std_17)
+if(MSVC)
+  target_compile_options(FabricRuntime PRIVATE /W4 /WX)
+else()
+  target_compile_options(FabricRuntime PRIVATE -Wall -Wextra -Wpedantic -Werror)
+endif()
+
+enable_testing()
+add_executable(FabricRuntimeTests tests/fabric_runtime_tests.cpp tests/fakes/FakeBackend.cpp)
+target_include_directories(FabricRuntimeTests PRIVATE include src/Fabric tests/fakes)
+target_link_libraries(FabricRuntimeTests PRIVATE FabricRuntime)
+add_test(NAME FabricRuntimeTests COMMAND FabricRuntimeTests)
