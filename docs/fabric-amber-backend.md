@@ -29,4 +29,17 @@ integration tests pass. MAME will be a separate, out-of-process provider and is 
 
 Typed ROM resources carry role, slot, and path and are independently ordered for program and sound inputs. The original flat list remains as an append-only ABI v1 compatibility field. Character and segment payloads are fixed-capacity inline arrays in caller-owned snapshot entries; no Amber-owned pointer crosses the ABI.
 
+Negotiation uses the encoded `AMBER_API_VERSION_2` value (`0x00020000`), never the ordinal
+integer `2`. Program and sound slots are independently required to be contiguous from slot zero;
+sparse slots are rejected rather than silently compressed. Paths are copied into provider-owned
+strings before the session is returned.
+
+The original PR #8 launch prefix is the minimum accepted ABI v1 request size. Fabric copies only the
+bytes covered by `struct_size`, treats missing append-only typed-ROM fields as absent, and never reads
+beyond the caller-declared prefix. New callers should use `sizeof(FabricLaunchRequest)`.
+
+Amber API v2 has a single coherent output-snapshot capability. The adapter intentionally maps that
+bit to Fabric lamps, reels, character displays, and segment displays because those are the four fixed
+families present in `AmberOutputSnapshotV1`.
+
 This provider consumes Amber API v2 DLLs only; direct historical core DLL support is not implemented. Oasis integration is the following PR. `src/Cores` and the old bridge remain until external-DLL parity and Oasis migration are proven. MAME remains deferred.
