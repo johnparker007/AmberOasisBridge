@@ -1,22 +1,32 @@
 cmake_minimum_required(VERSION 3.16)
 project(FabricFoundation LANGUAGES C CXX)
 
-add_library(FabricRuntime SHARED
+add_library(FabricRuntimeCore OBJECT
   src/Fabric/FabricRuntime.cpp
   src/Fabric/Backends/Amber/AmberDynamicLibrary.cpp
   src/Fabric/Backends/Amber/AmberBackendProvider.cpp)
-target_include_directories(FabricRuntime PUBLIC include PRIVATE src/Fabric)
-target_include_directories(FabricRuntime PRIVATE src/Fabric/Backends/Amber)
-target_compile_definitions(FabricRuntime PRIVATE FABRIC_EXPORTS)
+target_include_directories(FabricRuntimeCore PRIVATE
+  include
+  src/Fabric
+  src/Fabric/Backends/Amber)
+target_compile_definitions(FabricRuntimeCore PRIVATE FABRIC_EXPORTS)
+target_compile_features(FabricRuntimeCore PRIVATE cxx_std_17)
+set_target_properties(FabricRuntimeCore PROPERTIES POSITION_INDEPENDENT_CODE ON)
+if(MSVC)
+  target_compile_options(FabricRuntimeCore PRIVATE /W4 /WX)
+else()
+  target_compile_options(FabricRuntimeCore PRIVATE -Wall -Wextra -Wpedantic -Werror)
+endif()
+
+# Keep the production DLL as the sole public runtime target.  Tests that need
+# internal C++ composition hooks embed the same implementation objects instead
+# of attempting to import those hooks from the DLL.
+add_library(FabricRuntime SHARED $<TARGET_OBJECTS:FabricRuntimeCore>)
+target_include_directories(FabricRuntime PUBLIC include)
 target_compile_features(FabricRuntime PUBLIC cxx_std_17)
 set_target_properties(FabricRuntime PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS OFF)
-if(UNIX AND NOT APPLE)
-  target_link_libraries(FabricRuntime PRIVATE dl)
-endif()
-if(MSVC)
-  target_compile_options(FabricRuntime PRIVATE /W4 /WX)
-else()
-  target_compile_options(FabricRuntime PRIVATE -Wall -Wextra -Wpedantic -Werror)
+if(CMAKE_DL_LIBS)
+  target_link_libraries(FabricRuntime PRIVATE ${CMAKE_DL_LIBS})
 endif()
 
 enable_testing()
@@ -25,9 +35,16 @@ target_include_directories(FakeAmberApiV2 PRIVATE include tests/fakes)
 target_compile_definitions(FakeAmberApiV2 PRIVATE AMBER_BRIDGE_EXPORTS)
 target_compile_features(FakeAmberApiV2 PRIVATE cxx_std_17)
 add_library(FakeAmberNoApi SHARED tests/fakes/FakeAmberNoApi.cpp)
-add_executable(FabricRuntimeTests tests/fabric_runtime_tests.cpp tests/fakes/FakeBackend.cpp)
+add_executable(FabricRuntimeTests
+  tests/fabric_runtime_tests.cpp
+  tests/fakes/FakeBackend.cpp
+  $<TARGET_OBJECTS:FabricRuntimeCore>)
 target_include_directories(FabricRuntimeTests PRIVATE include src/Fabric tests/fakes)
-target_link_libraries(FabricRuntimeTests PRIVATE FabricRuntime FakeAmberApiV2)
+target_compile_definitions(FabricRuntimeTests PRIVATE FABRIC_EXPORTS)
+target_link_libraries(FabricRuntimeTests PRIVATE FakeAmberApiV2)
+if(CMAKE_DL_LIBS)
+  target_link_libraries(FabricRuntimeTests PRIVATE ${CMAKE_DL_LIBS})
+endif()
 add_test(NAME FabricRuntimeTests COMMAND FabricRuntimeTests)
 add_executable(AmberBackendTests tests/amber_backend_tests.cpp)
 target_include_directories(AmberBackendTests PRIVATE include tests/fakes)
