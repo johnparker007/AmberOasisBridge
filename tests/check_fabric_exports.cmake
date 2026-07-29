@@ -11,3 +11,6 @@ foreach(symbol FabricCreateRuntime FabricRuntimeGetLastError FabricCreateSession
     message(FATAL_ERROR "Missing public export: ${symbol}")
   endif()
 endforeach()
+if(WIN32 AND exports MATCHES "FabricRegisterBackendProvider")
+  message(FATAL_ERROR "Internal composition hook was exported: FabricRegisterBackendProvider")
+endif()
