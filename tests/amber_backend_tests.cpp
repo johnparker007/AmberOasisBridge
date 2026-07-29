@@ -54,7 +54,8 @@ int main() {
   q = request();
   std::strcpy(q.backend_path, FAKE_AMBER_NO_API_PATH);
   CHECK(FabricCreateSession(r, &q, &s) == FABRIC_NOT_SUPPORTED);
-  CHECK(runtime_error(r).find("missing AmberGetApi") != std::string::npos);
+  CHECK(runtime_error(r).find("required export 'Initialise'") !=
+        std::string::npos);
   q = request();
   std::strcpy(q.machine_identifier, "unknown-machine");
   CHECK(FabricCreateSession(r, &q, &s) == FABRIC_NOT_FOUND);

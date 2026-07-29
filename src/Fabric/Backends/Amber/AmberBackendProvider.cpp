@@ -1,4 +1,5 @@
 #include "AmberDynamicLibrary.h"
+#include "AmberLegacyAdapter.h"
 #include "FabricBackend.h"
 #include "fabric/fabric_amber.h"
 
@@ -455,8 +456,8 @@ public:
         return FABRIC_NOT_FOUND;
       void *get_api_symbol = library->symbol("AmberGetApi");
       if (!get_api_symbol) {
-        error = "Amber DLL is missing AmberGetApi";
-        return FABRIC_NOT_SUPPORTED;
+        return CreateLegacyAmberInstance(request, std::move(library), out,
+                                         error);
       }
       static_assert(sizeof(GetApi) == sizeof(get_api_symbol),
                     "dynamic function pointer representation");

@@ -18,7 +18,9 @@ AmberDynamicLibrary::~AmberDynamicLibrary() {
 bool AmberDynamicLibrary::open(const std::string &path,
                                std::string &error) noexcept {
 #ifdef _WIN32
-  handle_ = LoadLibraryA(path.c_str());
+  handle_ = LoadLibraryExA(path.c_str(), nullptr,
+                           LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR |
+                               LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
   if (!handle_) {
     const DWORD code = GetLastError();
     char *message = nullptr;

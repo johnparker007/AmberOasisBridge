@@ -1,11 +1,22 @@
-# Amber API v2 backend contract
+# Amber backend compatibility contract
 
 The Amber backend is an adapter, not part of Fabric's public machine model. It receives a launch
 request selected by backend and machine identifiers and loads the **exact absolute DLL path supplied by
 the frontend**. It must not search relative directories, substitute `AmberBridge.dll`, choose
 `AmberOasis.JPMSystem6.dll`, or infer a specific Amber platform.
 
-The adapter negotiates exactly Amber API v2 through `AmberGetApi`. DLLs exposing only historical platform/core exports are not compatible. The adapter maps discovered capabilities to extensible Fabric
+Fabric first detects the provider-style API by the single `AmberGetApi` export. If it is absent,
+Fabric deterministically detects the unchanged production/System 6 ABI using `Initialise`,
+`Shutdown`, `Reset`, `Run`, `LoadROM`, `GetOutputSnapshotSize`, `GetOutputSnapshot`,
+`TurnSwitchOn`, and `TurnSwitchOff`. A partially matching DLL is rejected with the exact missing
+symbol, DLL path, adapter, and resolution phase. Amber does **not** need to be rebuilt and does not
+need to export `AmberGetApi`; the compatibility adapter is private to `FabricRuntime`.
+
+The production ABI is the existing `extern "C"`, native C calling-convention interface declared by
+the maintained System 6 bridge. It is a DLL-owned singleton: `Initialise` acquires it and `Shutdown`
+destroys it. ROM paths are borrowed only for the duration of `LoadROM`/`LoadSoundROM`; snapshots and
+audio are copied into caller-owned buffers. Its `PA2_OutputSnapshot` structures use 4-byte packing.
+Optional audio is detected only when both `GetAudioFormat` and `FillAudioFrames` exist. The adapter maps discovered capabilities to extensible Fabric
 flags. It translates Fabric digital input and generic snapshot objects without exposing Amber
 structures. In particular it must retain logical lamp state separately from brightness, preserve
 signed reel positions, translate alpha attributes and seven-segment masks without reinterpretation,
@@ -42,4 +53,25 @@ Amber API v2 has a single coherent output-snapshot capability. The adapter inten
 bit to Fabric lamps, reels, character displays, and segment displays because those are the four fixed
 families present in `AmberOutputSnapshotV1`.
 
-This provider consumes Amber API v2 DLLs only; direct historical core DLL support is not implemented. Oasis integration is the following PR. `src/Cores` and the old bridge remain until external-DLL parity and Oasis migration are proven. MAME remains deferred.
+`FakeAmberApiV2` is only a provider-style contract test implementation; it is not the required
+production ABI. `FakeAmberLegacy` deliberately omits `AmberGetApi` and exercises the production
+adapter, including ROM/configuration translation, lifecycle, output, 44.1 kHz stereo PCM16 audio,
+timing remainders, repeated loading, and unloading.
+
+## Using an existing Amber DLL
+
+Keep the backend identifier `amber-api-v2` for Oasis compatibility and set `backend_path` to the
+absolute path of the existing Amber/System 6 DLL. Supply the two program ROMs as typed
+`FABRIC_ROM_ROLE_PROGRAM` slots 0 and 1, and sound ROMs (when used) as contiguous
+`FABRIC_ROM_ROLE_SOUND` slots. Fabric loads that exact path and resolves dependencies from the DLL
+directory and standard controlled Windows loader directories.
+
+Proprietary DLLs and ROMs are never committed. For an opt-in local smoke test, set
+`FABRIC_REAL_AMBER_DLL` to the absolute production DLL path and provide ROM paths through the local
+test harness (program slots 0/1, plus optional sound slots), then run `AmberLegacyBackendTests` or
+the equivalent application lifecycle: create, initialise, reset, advance, snapshot, audio query,
+shutdown, and destroy. CI uses `FakeAmberLegacy` and requires no proprietary files. An absent
+`FABRIC_REAL_AMBER_DLL` is intentionally treated as a skipped local integration test.
+
+Both provider-style API v2 DLLs and direct production core DLLs are supported. `src/Cores` and the
+old bridge remain compatibility assets; MAME remains deferred.

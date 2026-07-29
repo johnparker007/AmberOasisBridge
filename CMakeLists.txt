@@ -4,6 +4,7 @@ project(FabricFoundation LANGUAGES C CXX)
 add_library(FabricRuntimeCore OBJECT
   src/Fabric/FabricRuntime.cpp
   src/Fabric/Backends/Amber/AmberDynamicLibrary.cpp
+  src/Fabric/Backends/Amber/AmberLegacyAdapter.cpp
   src/Fabric/Backends/Amber/AmberBackendProvider.cpp)
 target_include_directories(FabricRuntimeCore PRIVATE
   include
@@ -35,6 +36,9 @@ target_include_directories(FakeAmberApiV2 PRIVATE include tests/fakes)
 target_compile_definitions(FakeAmberApiV2 PRIVATE AMBER_BRIDGE_EXPORTS)
 target_compile_features(FakeAmberApiV2 PRIVATE cxx_std_17)
 add_library(FakeAmberNoApi SHARED tests/fakes/FakeAmberNoApi.cpp)
+add_library(FakeAmberLegacy SHARED tests/fakes/FakeAmberLegacy.cpp)
+target_include_directories(FakeAmberLegacy PRIVATE src/Cores/JPMSystem6)
+target_compile_features(FakeAmberLegacy PRIVATE cxx_std_17)
 add_executable(FabricRuntimeTests
   tests/fabric_runtime_tests.cpp
   tests/fakes/FakeBackend.cpp
@@ -52,6 +56,14 @@ target_link_libraries(AmberBackendTests PRIVATE FabricRuntime FakeAmberApiV2)
 target_compile_definitions(AmberBackendTests PRIVATE FAKE_AMBER_PATH="$<TARGET_FILE:FakeAmberApiV2>")
 target_compile_definitions(AmberBackendTests PRIVATE FAKE_AMBER_NO_API_PATH="$<TARGET_FILE:FakeAmberNoApi>")
 add_test(NAME AmberBackendTests COMMAND AmberBackendTests)
+add_executable(AmberLegacyBackendTests tests/amber_legacy_backend_tests.cpp)
+target_include_directories(AmberLegacyBackendTests PRIVATE include)
+target_link_libraries(AmberLegacyBackendTests PRIVATE FabricRuntime)
+target_compile_definitions(AmberLegacyBackendTests PRIVATE
+  FAKE_AMBER_LEGACY_PATH="$<TARGET_FILE:FakeAmberLegacy>"
+  FAKE_AMBER_NO_API_PATH="$<TARGET_FILE:FakeAmberNoApi>")
+add_dependencies(AmberLegacyBackendTests FakeAmberLegacy FakeAmberNoApi)
+add_test(NAME AmberLegacyBackendTests COMMAND AmberLegacyBackendTests)
 target_compile_definitions(FabricRuntimeTests PRIVATE FAKE_AMBER_PATH="$<TARGET_FILE:FakeAmberApiV2>")
 add_dependencies(FabricRuntimeTests FakeAmberApiV2)
 
