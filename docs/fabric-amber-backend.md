@@ -27,10 +27,12 @@ and unload must have deterministic ordering, including partial-failure cleanup. 
 copied into Fabric-owned boundary text. Exceptions, borrowed Amber pointers, and loader handles never
 cross the C ABI.
 
-Amber cycle counts are adapter-local. For System 6 the adapter must preserve the existing 1 kHz pump
-and derive audio from elapsed time in complete PCM frames, including fractional-frame accumulation;
-Fabric's generic time advance must not redefine that behaviour. Reel, coin, and percentage
-configuration mappings require parity tests before frontend migration.
+Amber cycle counts are adapter-local. System 6 receives 8 MHz CPU-cycle budgets (125 ns per cycle),
+with sub-cycle nanoseconds retained between calls. The flat `Run(UINT32)` return value is the native
+CPU/emulator return value, not a documented progress count or status. Fabric therefore consumes the
+requested budget after one call, accepts zero, and uses the return only for diagnostics. Requests
+larger than `INT32_MAX` are split into bounded calls; provider-style API v2 progress semantics are
+unchanged.
 
 The maintained Amber sources under `src/Cores` and the current bridge remain compatibility assets.
 They will be removed only after the external-DLL implementation reaches behavioural parity and its
@@ -75,3 +77,20 @@ shutdown, and destroy. CI uses `FakeAmberLegacy` and requires no proprietary fil
 
 Both provider-style API v2 DLLs and direct production core DLLs are supported. `src/Cores` and the
 old bridge remain compatibility assets; MAME remains deferred.
+
+## Production diagnostics and pump contracts
+
+Set `FABRIC_AMBER_TRACE=1` before starting Oasis to emit bounded production-adapter diagnostics to
+the Windows debugger. Tracing covers adapter selection, initialise, ROM loading, configuration,
+the first reset, the first eight `Run` calls, the first snapshot, audio-format queries, the first
+eight audio reads, and shutdown. Normal execution emits no trace, and paths are logged without ROM
+contents or audio samples.
+
+The snapshot ABI is the existing pack-4 `PA2_OutputSnapshot` (24,812 bytes). Production System 6
+supplies at least 512 matrix lamps, eight reels, one segmented alpha display, and 256 LED-plane
+entries. Fabric maps these to the same stable 512/8/1/16 output shape used by the established Amber
+bridge; it does not expose the unrelated 40-entry `LedDisplays` array as 40 Fabric displays.
+
+`GetAudioFormat` returns the size of the 24-byte `PA2_AudioFormat`. `FillAudioFrames` receives a
+frame capacity, writes interleaved stereo samples (`frames * channels` samples), and returns frames,
+not samples. Fabric validates the stereo extent and the returned frame count before reporting it.

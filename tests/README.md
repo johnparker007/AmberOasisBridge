@@ -4,6 +4,9 @@
 System 6 ABI and intentionally has no `AmberGetApi` export. It covers adapter detection, actionable
 missing-export diagnostics, typed ROM ordering, configuration, lifecycle, nanosecond remainder
 conversion, inputs, snapshots, 44100 Hz stereo PCM16 audio, repeated creation, and unload/reload.
+Its flat `Run` deliberately returns zero while consuming the request, matching the production ABI's
+absence of progress-count semantics. The regression lifecycle performs audio-format, repeated
+advance/snapshot/audio operations, remainder accumulation, and an `INT32_MAX`-spanning advance.
 
 To exercise proprietary files locally, set `FABRIC_REAL_AMBER_DLL` to an absolute existing Amber
 DLL path and supply its required ROM paths in a local test harness. The opt-in check should skip when
