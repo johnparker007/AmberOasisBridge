@@ -49,3 +49,7 @@ This foundation contains no MAME implementation, networking, gRPC, JSON IPC, or 
 also does not replace the current Amber C ABI. Those omissions keep this change architectural and let
 the established Oasis integration remain the behavioural oracle while adapters are developed behind
 contract tests.
+
+## Second migration stage
+
+`FabricRuntime` is now a shared library (`FabricRuntime.dll` on Windows) with an exported C ABI. Runtime errors cover failures before session creation. Snapshot display data is inline caller-owned storage. The built-in `amber-api-v2` provider loads only the exact absolute requested path and negotiates `AmberGetApi` v2; historical core-only DLLs are unsupported. Oasis migration follows in the next PR, while `src/Cores` and the old bridge remain. MAME is deferred.

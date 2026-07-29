@@ -1,12 +1,12 @@
-# Future Amber backend contract
+# Amber API v2 backend contract
 
-The Amber backend is an adapter, not part of Fabric's public machine model. It will receive a launch
-request selected by backend and machine identifiers and load the **exact absolute DLL path supplied by
+The Amber backend is an adapter, not part of Fabric's public machine model. It receives a launch
+request selected by backend and machine identifiers and loads the **exact absolute DLL path supplied by
 the frontend**. It must not search relative directories, substitute `AmberBridge.dll`, choose
 `AmberOasis.JPMSystem6.dll`, or infer a specific Amber platform.
 
-The adapter will negotiate exactly Amber API v2 and map discovered capabilities to extensible Fabric
-flags. It will translate Fabric digital input and generic snapshot objects without exposing Amber
+The adapter negotiates exactly Amber API v2 through `AmberGetApi`. DLLs exposing only historical platform/core exports are not compatible. The adapter maps discovered capabilities to extensible Fabric
+flags. It translates Fabric digital input and generic snapshot objects without exposing Amber
 structures. In particular it must retain logical lamp state separately from brightness, preserve
 signed reel positions, translate alpha attributes and seven-segment masks without reinterpretation,
 and expose PCM16 interleaved frames using the negotiated format.
@@ -24,3 +24,22 @@ configuration mappings require parity tests before frontend migration.
 The maintained Amber sources under `src/Cores` and the current bridge remain compatibility assets.
 They will be removed only after the external-DLL implementation reaches behavioural parity and its
 integration tests pass. MAME will be a separate, out-of-process provider and is not implemented here.
+
+## ABI and migration status
+
+Typed ROM resources carry role, slot, and path and are independently ordered for program and sound inputs. The original flat list remains as an append-only ABI v1 compatibility field. Character and segment payloads are fixed-capacity inline arrays in caller-owned snapshot entries; no Amber-owned pointer crosses the ABI.
+
+Negotiation uses the encoded `AMBER_API_VERSION_2` value (`0x00020000`), never the ordinal
+integer `2`. Program and sound slots are independently required to be contiguous from slot zero;
+sparse slots are rejected rather than silently compressed. Paths are copied into provider-owned
+strings before the session is returned.
+
+The original PR #8 launch prefix is the minimum accepted ABI v1 request size. Fabric copies only the
+bytes covered by `struct_size`, treats missing append-only typed-ROM fields as absent, and never reads
+beyond the caller-declared prefix. New callers should use `sizeof(FabricLaunchRequest)`.
+
+Amber API v2 has a single coherent output-snapshot capability. The adapter intentionally maps that
+bit to Fabric lamps, reels, character displays, and segment displays because those are the four fixed
+families present in `AmberOutputSnapshotV1`.
+
+This provider consumes Amber API v2 DLLs only; direct historical core DLL support is not implemented. Oasis integration is the following PR. `src/Cores` and the old bridge remain until external-DLL parity and Oasis migration are proven. MAME remains deferred.
