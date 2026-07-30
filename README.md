@@ -22,8 +22,3 @@ Repeat with `out/build/release` and `-DCMAKE_BUILD_TYPE=Release` for an optimize
 headers are under [`include/fabric/`](include/fabric/). See
 [`docs/fabric-architecture.md`](docs/fabric-architecture.md) for runtime boundaries and
 [`docs/fabric-amber-backend.md`](docs/fabric-amber-backend.md) for the production adapter contract.
-
-## Provenance
-
-Fabric was originally developed in `johnparker007/AmberOasisBridge`; this standalone tree is intended
-for `johnparker007/Fabric`.
