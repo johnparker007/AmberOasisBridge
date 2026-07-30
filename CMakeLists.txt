@@ -1,6 +1,14 @@
 cmake_minimum_required(VERSION 3.16)
 project(Fabric LANGUAGES C CXX)
 
+# Apply the language contract to every C++ target, including test executables
+# shown by Visual Studio's CMake Targets view.  Keeping this at project scope
+# prevents a newly added target from silently falling back to MSVC's default
+# language mode when it consumes C++17 headers such as <filesystem>.
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
 execute_process(COMMAND git rev-parse --short HEAD WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
   OUTPUT_VARIABLE FABRIC_SOURCE_REVISION OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
 if(NOT FABRIC_SOURCE_REVISION)
@@ -81,6 +89,7 @@ add_test(NAME AmberProductionAudioTests COMMAND AmberProductionAudioTests)
 add_executable(AmberTraceTests tests/amber_trace_tests.cpp $<TARGET_OBJECTS:FabricRuntimeCore>)
 target_include_directories(AmberTraceTests PRIVATE include src/Fabric src/Fabric/Backends/Amber)
 target_compile_definitions(AmberTraceTests PRIVATE FABRIC_EXPORTS FAKE_PRODUCTION_AMBER_PATH="$<TARGET_FILE:FakeProductionAmber>")
+target_compile_features(AmberTraceTests PRIVATE cxx_std_17)
 add_dependencies(AmberTraceTests FakeProductionAmber)
 if(CMAKE_DL_LIBS)
   target_link_libraries(AmberTraceTests PRIVATE ${CMAKE_DL_LIBS})
