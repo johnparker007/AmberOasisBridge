@@ -3,6 +3,16 @@
 #include <algorithm>
 #include <cstring>
 
+#ifndef FAKE_AMBER_SAMPLE_RATE
+#define FAKE_AMBER_SAMPLE_RATE 44100
+#endif
+#ifndef FAKE_AMBER_CHANNELS
+#define FAKE_AMBER_CHANNELS 2
+#endif
+#ifndef FAKE_AMBER_MAX_FRAMES_PER_READ
+#define FAKE_AMBER_MAX_FRAMES_PER_READ UINT32_MAX
+#endif
+
 #ifdef _WIN32
 #define LEGACY_EXPORT extern "C" __declspec(dllexport)
 #else
@@ -114,15 +124,16 @@ LEGACY_EXPORT uint32_t GetAudioFormat(PA2_AudioFormat *f, uint32_t size) {
     return 0;
   f->SizeBytes = sizeof(*f);
   f->Version = PA2_AUDIO_FORMAT_VERSION;
-  f->SampleRate = 44100;
-  f->Channels = 2;
+  f->SampleRate = FAKE_AMBER_SAMPLE_RATE;
+  f->Channels = FAKE_AMBER_CHANNELS;
   f->BitsPerSample = 16;
   f->Format = PA2_AUDIO_FORMAT_PCM_S16;
   return sizeof(*f);
 }
 LEGACY_EXPORT uint32_t FillAudioFrames(int16_t *samples, uint32_t frames) {
-  const uint32_t written = std::min(frames, 2u);
-  for (uint32_t i = 0; i < written * 2; ++i)
+  const uint32_t written = std::min(
+      frames, static_cast<uint32_t>(FAKE_AMBER_MAX_FRAMES_PER_READ));
+  for (uint32_t i = 0; i < written * FAKE_AMBER_CHANNELS; ++i)
     samples[i] = static_cast<int16_t>(100 + i);
   return written;
 }

@@ -53,6 +53,22 @@ add_library(FakeAmberLegacyMissingConfig SHARED tests/fakes/FakeAmberLegacy.cpp)
 target_include_directories(FakeAmberLegacyMissingConfig PRIVATE src/Cores/JPMSystem6)
 target_compile_definitions(FakeAmberLegacyMissingConfig PRIVATE FAKE_AMBER_OMIT_SET_STEPS)
 target_compile_features(FakeAmberLegacyMissingConfig PRIVATE cxx_std_17)
+add_library(FakeAmberLegacy48Stereo SHARED tests/fakes/FakeAmberLegacy.cpp)
+target_include_directories(FakeAmberLegacy48Stereo PRIVATE src/Cores/JPMSystem6)
+target_compile_definitions(FakeAmberLegacy48Stereo PRIVATE
+  FAKE_AMBER_SAMPLE_RATE=48000 FAKE_AMBER_CHANNELS=2)
+target_compile_features(FakeAmberLegacy48Stereo PRIVATE cxx_std_17)
+add_library(FakeAmberLegacy48Mono SHARED tests/fakes/FakeAmberLegacy.cpp)
+target_include_directories(FakeAmberLegacy48Mono PRIVATE src/Cores/JPMSystem6)
+target_compile_definitions(FakeAmberLegacy48Mono PRIVATE
+  FAKE_AMBER_SAMPLE_RATE=48000 FAKE_AMBER_CHANNELS=1)
+target_compile_features(FakeAmberLegacy48Mono PRIVATE cxx_std_17)
+add_library(FakeAmberLegacyPartial SHARED tests/fakes/FakeAmberLegacy.cpp)
+target_include_directories(FakeAmberLegacyPartial PRIVATE src/Cores/JPMSystem6)
+target_compile_definitions(FakeAmberLegacyPartial PRIVATE
+  FAKE_AMBER_SAMPLE_RATE=48000 FAKE_AMBER_CHANNELS=2
+  FAKE_AMBER_MAX_FRAMES_PER_READ=7)
+target_compile_features(FakeAmberLegacyPartial PRIVATE cxx_std_17)
 add_executable(FabricRuntimeTests
   tests/fabric_runtime_tests.cpp
   tests/fakes/FakeBackend.cpp
@@ -80,6 +96,17 @@ target_compile_definitions(AmberLegacyBackendTests PRIVATE
 add_dependencies(AmberLegacyBackendTests FakeAmberLegacy
   FakeAmberLegacyMissingConfig FakeAmberNoApi)
 add_test(NAME AmberLegacyBackendTests COMMAND AmberLegacyBackendTests)
+add_executable(AmberLegacyAudioTests tests/amber_legacy_audio_tests.cpp)
+target_include_directories(AmberLegacyAudioTests PRIVATE include)
+target_link_libraries(AmberLegacyAudioTests PRIVATE FabricRuntime)
+target_compile_definitions(AmberLegacyAudioTests PRIVATE
+  FAKE_AMBER_441_STEREO_PATH="$<TARGET_FILE:FakeAmberLegacy>"
+  FAKE_AMBER_48_STEREO_PATH="$<TARGET_FILE:FakeAmberLegacy48Stereo>"
+  FAKE_AMBER_48_MONO_PATH="$<TARGET_FILE:FakeAmberLegacy48Mono>"
+  FAKE_AMBER_PARTIAL_PATH="$<TARGET_FILE:FakeAmberLegacyPartial>")
+add_dependencies(AmberLegacyAudioTests FakeAmberLegacy FakeAmberLegacy48Stereo
+  FakeAmberLegacy48Mono FakeAmberLegacyPartial)
+add_test(NAME AmberLegacyAudioTests COMMAND AmberLegacyAudioTests)
 add_executable(AmberTraceTests tests/amber_trace_tests.cpp
   $<TARGET_OBJECTS:FabricRuntimeCore>)
 target_include_directories(AmberTraceTests PRIVATE include src/Fabric

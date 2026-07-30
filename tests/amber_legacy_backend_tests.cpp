@@ -4,6 +4,7 @@
 #include <cstring>
 #include <iostream>
 #include <string>
+#include <vector>
 
 #define CHECK(x)                                                               \
   do {                                                                         \
@@ -33,6 +34,9 @@ static std::string session_error(FabricMachineSession *s) {
   uint32_t n = 0;
   FabricSessionGetLastError(s, b, sizeof(b), &n);
   return b;
+}
+static void FABRIC_CALL diagnostic(const char *message, void *context) {
+  static_cast<std::vector<std::string> *>(context)->emplace_back(message);
 }
 
 int main() {
@@ -81,6 +85,9 @@ int main() {
   good.rom_resource_count = 3;
   good.machine_configuration = &c;
   good.machine_configuration_size = sizeof(c);
+  std::vector<std::string> diagnostics;
+  good.diagnostic_callback = diagnostic;
+  good.diagnostic_user_data = &diagnostics;
   CHECK(FabricCreateSession(runtime, &good, &session) == FABRIC_OK);
   CHECK(FabricSessionInitialise(session) == FABRIC_OK);
   CHECK(FabricSessionReset(session) == FABRIC_OK);
@@ -89,8 +96,7 @@ int main() {
   format.struct_version = FABRIC_ABI_VERSION_1;
   CHECK(FabricSessionGetAudioFormat(session, &format) == FABRIC_OK);
   CHECK(format.sample_rate == 44100 && format.channel_count == 2);
-  CHECK(FabricSessionAdvance(session, 124) == FABRIC_OK);
-  CHECK(FabricSessionAdvance(session, 1) == FABRIC_OK);
+  CHECK(FabricSessionAdvance(session, 500000) == FABRIC_OK);
   FabricInput input{};
   input.struct_size = sizeof(input);
   input.struct_version = FABRIC_ABI_VERSION_1;
@@ -115,10 +121,16 @@ int main() {
   CHECK(FabricSessionGetSnapshot(session, &snap) == FABRIC_OK);
   CHECK(lamps[0].logical_state == 1 && lamps[1].logical_state == 1 &&
         lamps[1].brightness == 4.0f);
-  CHECK(reels[0].position == 10);
+  CHECK(reels[0].position == 9); /* A partial tick performs no native Run. */
   CHECK(chars[0].characters[0] == 0x1234 && chars[0].attributes[0] == 1);
   CHECK(segments[0].segment_masks[0] == 0x5a);
   CHECK(lamps[3].brightness == 3.0f && lamps[4].brightness >= 1.0f);
+  CHECK(FabricSessionAdvance(session, 500000) == FABRIC_OK);
+  CHECK(FabricSessionAdvance(session, 2000000) == FABRIC_OK);
+  CHECK(FabricSessionAdvance(session, 5000000) == FABRIC_OK);
+  CHECK(FabricSessionAdvance(session, 30000000) == FABRIC_OK);
+  CHECK(FabricSessionGetSnapshot(session, &snap) == FABRIC_OK);
+  CHECK(reels[0].position == 72009); /* 1 + 2 + 3 + 3 fixed ticks. */
   CHECK(FabricSessionReset(session) == FABRIC_OK);
   CHECK(FabricSessionReset(session) == FABRIC_OK);
   CHECK(FabricSessionGetSnapshot(session, &snap) == FABRIC_OK);
@@ -126,14 +138,29 @@ int main() {
   CHECK(lamps[3].brightness == 3.0f && lamps[4].brightness >= 3.0f);
   int16_t audio[8]{};
   uint32_t written = 0;
+  CHECK(FabricSessionAdvance(session, 1000000) == FABRIC_OK);
   CHECK(FabricSessionReadAudio(session, audio, 4, &written) == FABRIC_OK);
-  CHECK(written == 2 && audio[0] == 100 && audio[3] == 103);
-  /* Zero is the fake's normal Run return. It must not cause retry or failure.
-   * A request larger than INT32_MAX is split exactly once at the ABI bound. */
+  CHECK(written == 4 && audio[0] == 100 && audio[7] == 107);
+  /* Zero is the fake's normal Run return. It must not cause retry or failure;
+   * a long delay is clamped to exactly three fixed native calls. */
   CHECK(FabricSessionAdvance(session, (static_cast<uint64_t>(INT32_MAX) + 5u) *
                                           125u) == FABRIC_OK);
   CHECK(FabricSessionGetSnapshot(session, &snap) == FABRIC_OK);
-  CHECK(lamps[2].brightness == 3.0f);
+  CHECK(lamps[2].brightness == 13.0f);
+  uint32_t run_diagnostics = 0;
+  for (const auto &message : diagnostics) {
+    if (message.find("operation=AmberRun") != std::string::npos) {
+      ++run_diagnostics;
+      CHECK(message.find("requested_cycles=8000") != std::string::npos);
+    }
+  }
+  CHECK(run_diagnostics == 13);
+  bool selected = false, loaded = false;
+  for (const auto &message : diagnostics) {
+    selected |= message.find("operation=AdapterSelected") != std::string::npos;
+    loaded |= message.find("operation=AmberLibraryLoaded") != std::string::npos;
+  }
+  CHECK(selected && loaded);
   CHECK(FabricSessionReadAudio(session, audio, 4, &written) == FABRIC_OK);
   input.numerical_index = 250;
   input.active = 1;

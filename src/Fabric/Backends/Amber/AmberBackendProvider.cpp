@@ -455,6 +455,16 @@ public:
       auto library = std::make_unique<AmberDynamicLibrary>();
       if (!library->open(request.backend_path, error))
         return FABRIC_NOT_FOUND;
+      if (request.diagnostic_callback) {
+        const char message[] = "[Fabric]\ncategory=amber.production\n"
+                               "operation=AmberLibraryLoaded\nresult=success";
+        try {
+          request.diagnostic_callback(message, request.diagnostic_user_data);
+        } catch (...) {
+        }
+      } else {
+        amber_trace::Write("category=amber.production; operation=AmberLibraryLoaded; result=success");
+      }
       void *get_api_symbol = library->symbol("AmberGetApi");
       amber_trace::Write(std::string("AmberGetApi present: ") +
                          (get_api_symbol ? "yes" : "no"));
