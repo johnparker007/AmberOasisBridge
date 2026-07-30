@@ -34,6 +34,8 @@ extern "C" {
 
 typedef struct FabricRuntime FabricRuntime;
 typedef struct FabricMachineSession FabricMachineSession;
+typedef void(FABRIC_CALL *FabricDiagnosticCallback)(const char *message,
+                                                    void *user_data);
 
 typedef enum FabricResult {
   FABRIC_OK = 0,
@@ -70,6 +72,9 @@ typedef struct FabricLaunchRequest {
   /* Append-only v1 extension. Prefer typed resources when non-null. */
   const struct FabricRomResource *rom_resources;
   uint32_t rom_resource_count;
+  /* Append-only v1 extension. Text is valid only during the callback. */
+  FabricDiagnosticCallback diagnostic_callback;
+  void *diagnostic_user_data;
 } FabricLaunchRequest;
 
 typedef enum FabricRomRole {

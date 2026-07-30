@@ -77,9 +77,11 @@ public:
                  std::vector<std::string> program,
                  std::vector<std::string> sound,
                  const FabricAmberConfigurationV1 *configuration,
-                 std::string path)
+                 std::string path, FabricDiagnosticCallback diagnostic,
+                 void *diagnostic_user_data)
       : library_(std::move(library)), api_(api), program_(std::move(program)),
-        sound_(std::move(sound)), path_(std::move(path)) {
+        sound_(std::move(sound)), path_(std::move(path)),
+        diagnostic_(diagnostic), diagnostic_user_data_(diagnostic_user_data) {
     if (configuration)
       config_ = *configuration;
   }
@@ -89,7 +91,11 @@ public:
   }
 
   FabricResult initialise() noexcept override {
+    emit("AmberInitialiseBegin", "result=pending");
     const uint8_t native = api_.Initialise();
+    emit("AmberInitialiseEnd", "native_return=" + std::to_string(native) +
+                                   "; result=" +
+                                   (native ? "success" : "failure"));
     amber_trace::Write("Initialise: Amber return=" + std::to_string(native));
     if (!native)
       return fail("Initialise", "Amber return=0; DLL='" + path_ + "'");
@@ -98,15 +104,19 @@ public:
       return FABRIC_NOT_FOUND;
     if (!sound_.empty() && !load_roms(api_.LoadSoundROM, sound_, "sound"))
       return api_.LoadSoundROM ? FABRIC_NOT_FOUND : FABRIC_NOT_SUPPORTED;
-    const FabricResult configured =
-        apply_configuration("Initial configuration");
-    if (configured != FABRIC_OK)
-      return configured;
+    /* The production core may clear all machine configuration in Reset.  Use
+     * the one reset path for startup and every later reset so configuration
+     * is never applied on the wrong side of that boundary. */
+    const FabricResult reset_result = reset();
+    if (reset_result != FABRIC_OK)
+      return reset_result;
     amber_trace::Write("initialisation complete: Fabric result=0");
     return ok();
   }
   FabricResult reset() noexcept override {
+    emit("AmberResetBegin", "result=pending");
     api_.Reset();
+    emit("AmberResetEnd", "result=success");
     if (reset_trace_count_ < 8)
       amber_trace::Write("Reset: native reset completed");
     const FabricResult configured = apply_configuration("Reset configuration");
@@ -119,20 +129,32 @@ public:
     return ok();
   }
   FabricResult advance(uint64_t ns) noexcept override {
-    const uint64_t total = remainder_ + ns;
-    uint64_t cycles = total / 125u;
-    remainder_ = total % 125u;
-    while (cycles) {
-      const uint32_t request =
-          static_cast<uint32_t>(std::min<uint64_t>(cycles, INT32_MAX));
+    constexpr uint64_t tick_ns = UINT64_C(1000000);
+    constexpr uint32_t request = 8000;
+    constexpr uint64_t maximum_catch_up = 3;
+    const uint64_t whole_ticks = ns / tick_ns;
+    const uint64_t combined_remainder = remainder_ + ns % tick_ns;
+    const uint64_t available_ticks =
+        whole_ticks + combined_remainder / tick_ns;
+    remainder_ = combined_remainder % tick_ns;
+    /* The direct pump clamps a delayed boundary to three calls and discards
+     * excess whole ticks.  Only a sub-millisecond remainder is retained. */
+    const uint64_t executed_ticks =
+        std::min<uint64_t>(available_ticks, maximum_catch_up);
+    for (uint64_t tick = 0; tick < executed_ticks; ++tick) {
       const int32_t native = api_.Run(request);
       /* The flat ABI exposes the emulator/CPU return value for observation;
        * it does not define that value as a progress count or error status.
        * The requested argument is the consumed time budget. */
-      cycles -= request;
-      if (advance_trace_count_ < 16) {
+      if (advance_trace_count_ < 32) {
+        emit("AmberRun", "tick=" + std::to_string(native_tick_ + 1) +
+                             "; requested_cycles=" +
+                             std::to_string(request) +
+                             "; native_return=" + std::to_string(native) +
+                             "; result=success");
+        ++native_tick_;
         amber_trace::Write("Run: elapsed_ns=" + std::to_string(ns) +
-                           "; cycles=" + std::to_string(request) +
+                           "; requested_cycles=" + std::to_string(request) +
                            "; retained_ns=" + std::to_string(remainder_) +
                            "; native_return=" + std::to_string(native) +
                            "; Fabric result=0");
@@ -150,6 +172,7 @@ public:
       return shutdown_result_ =
                  fail("Shutdown", "Amber return=0; DLL='" + path_ + "'");
     started_ = false;
+    emit("AmberShutdown", "native_return=1; result=success");
     amber_trace::Write("Shutdown: Amber return=1; Fabric result=0");
     return shutdown_result_ = ok();
   }
@@ -314,6 +337,11 @@ public:
       has_previous_snapshot_ = true;
       ++snapshot_trace_count_;
     }
+    if (snapshot_diagnostic_count_ < 16) {
+      emit("AmberSnapshot", "sequence=" + std::to_string(sequence_ + 1) +
+                                "; result=success");
+      ++snapshot_diagnostic_count_;
+    }
     out.sequence = ++sequence_;
     return ok();
   }
@@ -348,6 +376,9 @@ public:
         "GetAudioFormat: Amber return=" + std::to_string(returned) +
         "; sample rate=" + std::to_string(f.SampleRate) + "; channels=" +
         std::to_string(f.Channels) + "; bits=16; Fabric result=0");
+    emit("AmberAudioFormat", "sample_rate=" + std::to_string(f.SampleRate) +
+                                 "; channels=" + std::to_string(f.Channels) +
+                                 "; bits_per_sample=16; result=success");
     return ok();
   }
   FabricResult read_audio(int16_t *samples, uint32_t capacity,
@@ -378,6 +409,12 @@ public:
           "; total frames=" + std::to_string(total_audio_frames_) +
           (written <= capacity ? "; Fabric result=0" : "; Fabric result=7"));
       ++audio_trace_count_;
+      emit("AmberReadAudio", "requested_frames=" +
+                                 std::to_string(capacity) +
+                                 "; returned_frames=" +
+                                 std::to_string(written) +
+                                 "; result=" +
+                                 (written <= capacity ? "success" : "failure"));
     }
     if (written > capacity) {
       const uint32_t invalid = written;
@@ -391,6 +428,19 @@ public:
   std::string last_error() const noexcept override { return error_; }
 
 private:
+  void emit(const std::string &operation, const std::string &metadata) noexcept {
+    const std::string message = "[Fabric]\ncategory=amber.production\noperation=" +
+                                operation + "\n" + metadata;
+    if (diagnostic_) {
+      try {
+        diagnostic_(message.c_str(), diagnostic_user_data_);
+      } catch (...) {
+      }
+    } else {
+      amber_trace::Write("category=amber.production; operation=" + operation +
+                         "; " + metadata);
+    }
+  }
   using Load = uint32_t (*)(uint8_t *, uint8_t *, uint8_t *, uint8_t *);
   bool load_roms(Load load, const std::vector<std::string> &paths,
                  const char *role) {
@@ -406,6 +456,11 @@ private:
     for (size_t i = 0; i < paths.size(); ++i)
       p[i] = reinterpret_cast<uint8_t *>(const_cast<char *>(paths[i].c_str()));
     const uint32_t native = load(p[0], p[1], p[2], p[3]);
+    emit(std::strcmp(role, "program") == 0 ? "AmberLoadProgramRoms"
+                                             : "AmberLoadSoundRoms",
+         "slots=" + std::to_string(paths.size()) +
+             "; native_return=" + std::to_string(native) +
+             "; result=" + (native ? "success" : "failure"));
     for (size_t i = 0; i < paths.size(); ++i)
       amber_trace::Write(
           std::string("Load ") + role + " ROM: slot=" + std::to_string(i) +
@@ -448,6 +503,14 @@ private:
           api_.SetOptoStart(index, static_cast<uint8_t>(r.opto_start));
           api_.SetOptoEnd(index, static_cast<uint8_t>(r.opto_end));
           api_.SetOptoInvert(index, static_cast<uint8_t>(r.opto_invert));
+          emit("AmberConfigureReel",
+               "index=" + std::to_string(i) +
+                   "; enabled=" + std::to_string(r.enabled) +
+                   "; steps=" + std::to_string(r.steps) +
+                   "; opto_start=" + std::to_string(r.opto_start) +
+                   "; opto_end=" + std::to_string(r.opto_end) +
+                   "; opto_invert=" + std::to_string(r.opto_invert) +
+                   "; result=success");
         }
       amber_trace::Write(prefix + "reels applied mask=" +
                          std::to_string(config_.reels.apply_mask));
@@ -474,6 +537,12 @@ private:
                                "missing export 'SetLockoutInvert'; DLL='" +
                                    path_ + "'");
           api_.SetLockoutInvert(index, static_cast<uint8_t>(c.lockout_invert));
+          emit("AmberConfigureCoin",
+               "index=" + std::to_string(i) +
+                   "; enabled=" + std::to_string(c.enabled) +
+                   "; value=" + std::to_string(c.value) +
+                   "; lockout_invert=" + std::to_string(c.lockout_invert) +
+                   "; result=success");
         }
       if (config_.coins.configuration_flags &
           AMBER_COIN_CONFIG_APPLY_LOCKOUT_PORT) {
@@ -518,6 +587,9 @@ private:
                            "missing export 'SetPercent'; DLL='" + path_ + "'");
       }
       api_.SetPercent(static_cast<uint8_t>(config_.percentage_switch));
+      emit("AmberConfigurePercentage",
+           "raw_value=" + std::to_string(config_.percentage_switch) +
+               "; result=success");
       amber_trace::Write(prefix + "percentage applied value=" +
                          std::to_string(config_.percentage_switch));
     }
@@ -566,15 +638,18 @@ private:
   FabricAmberConfigurationV1 config_{};
   std::set<uint8_t> asserted_;
   std::string error_, path_;
-  uint64_t remainder_ = 0, sequence_ = 0;
+  uint64_t remainder_ = 0, sequence_ = 0, native_tick_ = 0;
   uint32_t advance_trace_count_ = 0, audio_trace_count_ = 0,
-           reset_trace_count_ = 0, snapshot_trace_count_ = 0;
+           reset_trace_count_ = 0, snapshot_trace_count_ = 0,
+           snapshot_diagnostic_count_ = 0;
   uint64_t total_audio_frames_ = 0;
   std::array<uint8_t, 512> previous_lamps_{};
   std::array<int32_t, 8> previous_reels_{};
   std::array<uint16_t, 16> previous_alpha_{};
   bool started_ = false, stopped_ = false, has_previous_snapshot_ = false;
   FabricResult shutdown_result_ = FABRIC_OK;
+  FabricDiagnosticCallback diagnostic_ = nullptr;
+  void *diagnostic_user_data_ = nullptr;
 };
 
 template <typename T>
@@ -660,9 +735,21 @@ CreateLegacyAmberInstance(const FabricLaunchRequest &request,
                              : nullptr;
     amber_trace::Write("selected for DLL='" +
                        std::string(request.backend_path) + "'");
+    if (request.diagnostic_callback) {
+      const char message[] = "[Fabric]\ncategory=amber.production\n"
+                             "operation=AdapterSelected\nresult=success";
+      try {
+        request.diagnostic_callback(message, request.diagnostic_user_data);
+      } catch (...) {
+      }
+    } else {
+      amber_trace::Write("category=amber.production; operation=AdapterSelected; result=success");
+    }
     out = std::make_unique<LegacyInstance>(std::move(library), a,
                                            std::move(program), std::move(sound),
-                                           config, request.backend_path);
+                                           config, request.backend_path,
+                                           request.diagnostic_callback,
+                                           request.diagnostic_user_data);
     return FABRIC_OK;
   } catch (const std::exception &e) {
     error = e.what();

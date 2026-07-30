@@ -27,12 +27,12 @@ and unload must have deterministic ordering, including partial-failure cleanup. 
 copied into Fabric-owned boundary text. Exceptions, borrowed Amber pointers, and loader handles never
 cross the C ABI.
 
-Amber cycle counts are adapter-local. System 6 receives 8 MHz CPU-cycle budgets (125 ns per cycle),
-with sub-cycle nanoseconds retained between calls. The flat `Run(UINT32)` return value is the native
-CPU/emulator return value, not a documented progress count or status. Fabric therefore consumes the
-requested budget after one call, accepts zero, and uses the return only for diagnostics. Requests
-larger than `INT32_MAX` are split into bounded calls; provider-style API v2 progress semantics are
-unchanged.
+Amber cycle counts are adapter-local. The production System 6 adapter reproduces the direct pump:
+elapsed time is accumulated into 1 ms ticks, each complete tick makes one `Run(8000)` call, and a
+single advance executes at most three ticks. Excess complete delayed ticks are discarded while the
+sub-millisecond remainder is retained. The flat `Run(UINT32)` return value is native observational
+information, not a progress count or status; zero is valid. Provider-style API v2 progress semantics
+are unchanged.
 
 The maintained Amber sources under `src/Cores` and the current bridge remain compatibility assets.
 They will be removed only after the external-DLL implementation reaches behavioural parity and its
@@ -80,7 +80,11 @@ old bridge remain compatibility assets; MAME remains deferred.
 
 ## Production diagnostics and pump contracts
 
-Set `FABRIC_AMBER_TRACE=1` before starting Oasis to emit bounded production-adapter diagnostics to
+The append-only launch-request diagnostic callback is the primary production-adapter diagnostic
+path. It receives bounded `amber.production` events for adapter/library selection, initialise, ROM
+loads, resets, effective configuration, the first 32 native runs, the first 16 snapshots and audio
+reads, audio format, and shutdown. Callback failures are ignored. If no callback is supplied, set
+`FABRIC_AMBER_TRACE=1` before starting Oasis to emit the same lifecycle evidence to
 an append-only UTF-8 file and, on Windows, the debugger. By default the authoritative file is
 `%TEMP%\fabric-amber-<pid>.log`; set `FABRIC_AMBER_TRACE_FILE` to an absolute path to override it.
 Every line is serialized and flushed immediately. Tracing covers runtime/module identity, session
@@ -90,7 +94,8 @@ summaries, shutdown, and destruction. Normal execution creates no file, and trac
 contents or raw audio samples. Native `OutputDebugString` messages may not appear with managed-only
 debugging, so use the file as the authoritative output.
 
-The production reset order is native `Reset`, retained reel configuration, retained coin channels,
+Startup performs initialise, program and sound ROM loads, then uses the normal reset path. The
+production reset order is native `Reset`, retained reel configuration, retained coin channels,
 lockout and selected routes, then retained percentage. The same application method is used after ROM
 loading and after every reset; only selected masks are replayed, and disabled reels are not given
 invented settings.
