@@ -1,55 +1,34 @@
-# Fabric architecture foundation
+# Fabric architecture
 
-## Direction and boundaries
+The production dependency flow is:
 
-Fabric is a standalone emulator runtime: it is not a renamed Amber bridge and has no dependency on
-Oasis, Amber, JPM, or a particular machine. The target dependency flow is:
+```text
+frontend -> FabricRuntime.dll -> production Amber adapter -> external Amber/JPM System 6 DLL
+```
 
-> Oasis → Fabric API → backend abstraction → Amber DLL supplied by Oasis
+`include/fabric/fabric.h` defines the stable, versioned, exception-free C ABI. Runtime and session
+handles are opaque; destroy operations are deterministic; snapshot and audio buffers are caller-owned.
+The frontend selects `backend_kind = "amber"`, supplies a machine identifier, ROM resources, optional
+configuration, and the external DLL's exact absolute path.
 
-The frontend supplies a backend kind, machine identifier, an **absolute** backend library or executable
-path, ROM paths, and opaque machine configuration. Fabric selects a provider using both neutral
-identifiers and passes the launch request through without inventing a filename or relative location.
-An Amber provider must therefore load the exact path in the request; it must not hard-code
-`AmberBridge.dll`, `AmberOasis.JPMSystem6.dll`, or any platform.
+Internally, `FabricRuntime` owns backend providers and sessions own backend instances. Hidden C++
+composition hooks support tests without exporting implementation symbols. Calls on a session are
+serialized, and exceptions are caught before they reach the public DLL boundary. Capability flags
+and the neutral machine model cover digital inputs, lamps, reels, character/segment displays, and PCM
+audio without exposing backend-native structures.
 
-`include/fabric/fabric.h` is the versioned, exception-free C ABI for managed interop. Every public data
-structure starts with size and version fields. Runtime and session handles are opaque, ownership is
-explicit, and destroy operations are deterministic. Backend exceptions are caught inside the runtime
-boundary and never cross the C ABI.
+Only `FabricRuntime` is a production shared-library target. Fake libraries are test fixtures. The
+repository contains no emulator core, direct bridge product, plugin discovery, networking, or
+proprietary runtime inputs.
 
-## Runtime and providers
+## Manual Windows verification
 
-Each `FabricRuntime` owns a registry of `FabricBackendProvider` objects. Registration is explicit at the
-composition root; there is no process-global registry or dynamic plugin discovery. A provider decides
-whether it supports a backend-kind/machine-identifier pair and creates one `FabricBackendInstance`.
-The session then owns that instance for initialise, reset, advance, input, snapshot/audio retrieval,
-shutdown, and destruction. Calls on a session are serialised.
+The following checks remain manual and must not be inferred from cross-platform CI:
 
-Providers describe *what* a backend can do, not its transport. An instance might adapt an in-process
-DLL, supervise an executable, or use another local mechanism later. `advance(elapsed_nanoseconds)` is a
-time-oriented scheduling request, not a CPU-cycle contract. Cycle conversion and the existing System 6
-1 kHz pump/frame-based PCM timing belong inside the future Amber adapter.
-
-## Neutral machine model
-
-The first public model contains digital inputs, lamps, signed reel positions, character displays,
-segment masks, and PCM audio. Lamps carry a stable identifier, optional numerical index, logical state,
-and independent brightness. Caller-owned snapshot arrays prevent backend memory from escaping across
-the ABI. Capability flags are extensible: consumers must ignore unknown bits, allowing newer providers
-to work with older hosts.
-
-No Amber snapshot or platform header is included by the public API. Transport handles, DLL entry
-points, executable process details, cycle counts, and proprietary configuration layouts remain backend
-implementation details.
-
-## Deliberate omissions
-
-This foundation contains no MAME implementation, networking, gRPC, JSON IPC, or discovery system. It
-also does not replace the current Amber C ABI. Those omissions keep this change architectural and let
-the established Oasis integration remain the behavioural oracle while adapters are developed behind
-contract tests.
-
-## Second migration stage
-
-`FabricRuntime` is a shared library (`FabricRuntime.dll` on Windows) with an exported C ABI. Runtime errors cover failures before session creation. Snapshot display data is inline caller-owned storage. The built-in `amber-api-v2` backend loads only the exact absolute requested path: it uses provider API v2 when `AmberGetApi` exists and otherwise adapts the existing production System 6 exports. No Amber rebuild or ABI change is required, and Amber-specific adapter types remain internal. `src/Cores` and the old bridge remain. MAME is deferred.
+1. Perform clean Visual Studio 2022/x64 (or CMake x64) Debug and Release builds.
+2. Inspect `FabricRuntime.dll` exports and confirm only documented Fabric C exports are public.
+3. Launch with the real production Amber DLL and real ROMs.
+4. Verify lamps, reels, character/segment displays, audio, switches, reset, stop, and restart.
+5. Verify missing-DLL and missing-export diagnostics.
+6. Verify unloading and partial-startup cleanup.
+7. Confirm no separate bridge DLL or emulator-core DLL is built.

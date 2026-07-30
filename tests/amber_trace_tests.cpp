@@ -83,9 +83,9 @@ int main(int argc, char **argv) {
     FabricLaunchRequest request{};
     request.struct_size = sizeof(request);
     request.struct_version = FABRIC_ABI_VERSION_1;
-    std::strcpy(request.backend_kind, "amber-api-v2");
+    std::strcpy(request.backend_kind, "amber");
     std::strcpy(request.machine_identifier, "jpm-system6");
-    std::strncpy(request.backend_path, FAKE_AMBER_LEGACY_PATH,
+    std::strncpy(request.backend_path, FAKE_PRODUCTION_AMBER_PATH,
                  sizeof(request.backend_path) - 1);
     FabricMachineSession *session = nullptr;
     CHECK(FabricCreateSession(runtime, &request, &session) == FABRIC_OK);
@@ -106,7 +106,7 @@ int main(int argc, char **argv) {
     CHECK(text.find("Fabric runtime module:") != std::string::npos);
     if (mode == "explicit") {
       CHECK(text.find("thread=3 line=9") != std::string::npos);
-      CHECK(text.find("selected adapter: production-legacy") !=
+      CHECK(text.find("selected adapter: production") !=
             std::string::npos);
     }
   }

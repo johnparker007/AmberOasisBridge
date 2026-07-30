@@ -1,3 +1,4 @@
-# Maintained source
+# Fabric source
 
-Maintained emulator implementations will live here. No implementation has been ported yet.
+`Fabric/` contains the runtime and its production Amber adapter. Emulator-core source does not belong
+in this repository.

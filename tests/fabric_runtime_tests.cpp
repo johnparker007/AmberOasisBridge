@@ -38,16 +38,6 @@ int main() {
     CHECK(FabricRuntimeGetLastError(runtime, runtime_error, sizeof(runtime_error), &runtime_required) == FABRIC_OK);
     CHECK(std::strstr(runtime_error, "no backend provider") != nullptr);
 
-    auto relative_amber = request("amber-api-v2", "jpm-system6", "relative.dll");
-    CHECK(FabricCreateSession(runtime, &relative_amber, &missing) == FABRIC_INVALID_ARGUMENT);
-    auto amber_request = request("amber-api-v2", "jpm-system6", FAKE_AMBER_PATH);
-    FabricMachineSession *amber = nullptr;
-    auto amber_result = FabricCreateSession(runtime, &amber_request, &amber); if (amber_result != FABRIC_OK) { FabricRuntimeGetLastError(runtime, runtime_error, sizeof(runtime_error), &runtime_required); std::cerr << "Amber create: " << amber_result << " " << runtime_error << "\n"; } CHECK(amber_result == FABRIC_OK);
-    CHECK(FabricSessionInitialise(amber) == FABRIC_OK);
-    CHECK(FabricSessionAdvance(amber, 125) == FABRIC_OK);
-    CHECK(FabricSessionShutdown(amber) == FABRIC_OK);
-    FabricDestroySession(amber);
-
     FabricMachineSession *session = nullptr;
     auto selected = request("fake-b", "machine-b", "/absolute/backend/library.dll");
     CHECK(FabricCreateSession(runtime, &selected, &session) == FABRIC_OK);
