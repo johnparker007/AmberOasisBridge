@@ -1,15 +1,9 @@
 # Tests
 
-`AmberLegacyBackendTests` uses `FakeAmberLegacy`, which implements the unchanged production
-System 6 ABI and intentionally has no `AmberGetApi` export. It covers adapter detection, actionable
-missing-export diagnostics, typed ROM ordering, configuration, lifecycle, nanosecond remainder
-conversion, inputs, snapshots, 44100 Hz stereo PCM16 audio, repeated creation, and unload/reload.
-Its flat `Run` deliberately returns zero while consuming the request, matching the production ABI's
-absence of progress-count semantics. The regression lifecycle performs audio-format, repeated
-advance/snapshot/audio operations, remainder accumulation, and an `INT32_MAX`-spanning advance.
+Generic runtime tests use the internal fake backend. `AmberProductionBackendTests` and
+`AmberProductionAudioTests` load test-only `FakeProductionAmber` variants, which consume the same
+private packed ABI declaration as the production adapter. They cover lifecycle, ROM/configuration
+translation, fixed-tick execution, snapshots, inputs, diagnostics, audio accounting, partial reads,
+missing exports, repeated creation, and unload/reload without proprietary files.
 
-To exercise proprietary files locally, set `FABRIC_REAL_AMBER_DLL` to an absolute existing Amber
-DLL path and supply its required ROM paths in a local test harness. The opt-in check should skip when
-the variable or ROMs are unavailable; proprietary binaries and ROMs must not be added here.
-
-Regression and contract tests for maintained code belong here. The initial repository safeguard tests are in `tools/tests/`.
+The C and C++ header tests validate the public contract independently of a production backend.
