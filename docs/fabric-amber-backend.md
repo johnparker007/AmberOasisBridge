@@ -6,7 +6,7 @@ Amber/JPM System 6 C ABI. Required exports are resolved eagerly; an error identi
 symbol and the requested DLL. Optional exports enable sound and machine configuration features.
 
 Private structure declarations for this external binary contract live in
-`src/Fabric/Backends/Amber/ProductionAmberAbi.h`. They preserve four-byte packing and compile-time
+`src/Backends/Amber/ProductionAmberAbi.h`. They preserve four-byte packing and compile-time
 size/alignment checks but are not public Fabric headers or emulator source. The adapter owns the module,
 releases asserted inputs, shuts down partial or complete sessions, and unloads deterministically.
 

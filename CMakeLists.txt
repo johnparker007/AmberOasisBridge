@@ -16,12 +16,12 @@ if(NOT FABRIC_SOURCE_REVISION)
 endif()
 
 add_library(FabricRuntimeCore OBJECT
-  src/Fabric/FabricRuntime.cpp
-  src/Fabric/Backends/Amber/AmberDynamicLibrary.cpp
-  src/Fabric/Backends/Amber/AmberTrace.cpp
-  src/Fabric/Backends/Amber/ProductionAmberAdapter.cpp
-  src/Fabric/Backends/Amber/AmberBackendProvider.cpp)
-target_include_directories(FabricRuntimeCore PRIVATE include src/Fabric src/Fabric/Backends/Amber)
+  src/FabricRuntime.cpp
+  src/Backends/Amber/AmberDynamicLibrary.cpp
+  src/Backends/Amber/AmberTrace.cpp
+  src/Backends/Amber/ProductionAmberAdapter.cpp
+  src/Backends/Amber/AmberBackendProvider.cpp)
+target_include_directories(FabricRuntimeCore PRIVATE include src src/Backends/Amber)
 target_compile_definitions(FabricRuntimeCore PRIVATE FABRIC_EXPORTS FABRIC_SOURCE_REVISION="${FABRIC_SOURCE_REVISION}")
 target_compile_features(FabricRuntimeCore PRIVATE cxx_std_17)
 set_target_properties(FabricRuntimeCore PROPERTIES POSITION_INDEPENDENT_CODE ON)
@@ -42,7 +42,7 @@ endif()
 enable_testing()
 function(add_production_amber_fake target)
   add_library(${target} SHARED tests/fakes/FakeProductionAmber.cpp)
-  target_include_directories(${target} PRIVATE src/Fabric/Backends/Amber)
+  target_include_directories(${target} PRIVATE src/Backends/Amber)
   target_compile_features(${target} PRIVATE cxx_std_17)
 endfunction()
 add_production_amber_fake(FakeProductionAmber)
@@ -58,7 +58,7 @@ add_production_amber_fake(FakeProductionAmberPartial)
 target_compile_definitions(FakeProductionAmberPartial PRIVATE FAKE_AMBER_SAMPLE_RATE=48000 FAKE_AMBER_CHANNELS=2 FAKE_AMBER_MAX_FRAMES_PER_READ=7)
 
 add_executable(FabricRuntimeTests tests/fabric_runtime_tests.cpp tests/fakes/FakeBackend.cpp $<TARGET_OBJECTS:FabricRuntimeCore>)
-target_include_directories(FabricRuntimeTests PRIVATE include src/Fabric tests/fakes)
+target_include_directories(FabricRuntimeTests PRIVATE include src tests/fakes)
 target_compile_definitions(FabricRuntimeTests PRIVATE FABRIC_EXPORTS)
 if(CMAKE_DL_LIBS)
   target_link_libraries(FabricRuntimeTests PRIVATE ${CMAKE_DL_LIBS})
@@ -87,7 +87,7 @@ add_dependencies(AmberProductionAudioTests FakeProductionAmber FakeProductionAmb
 add_test(NAME AmberProductionAudioTests COMMAND AmberProductionAudioTests)
 
 add_executable(AmberTraceTests tests/amber_trace_tests.cpp $<TARGET_OBJECTS:FabricRuntimeCore>)
-target_include_directories(AmberTraceTests PRIVATE include src/Fabric src/Fabric/Backends/Amber)
+target_include_directories(AmberTraceTests PRIVATE include src src/Backends/Amber)
 target_compile_definitions(AmberTraceTests PRIVATE FABRIC_EXPORTS FAKE_PRODUCTION_AMBER_PATH="$<TARGET_FILE:FakeProductionAmber>")
 target_compile_features(AmberTraceTests PRIVATE cxx_std_17)
 add_dependencies(AmberTraceTests FakeProductionAmber)
