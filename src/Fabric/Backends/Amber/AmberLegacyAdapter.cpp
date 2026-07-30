@@ -116,6 +116,8 @@ public:
   FabricResult reset() noexcept override {
     emit("AmberResetBegin", "result=pending");
     api_.Reset();
+    audio_frames_available_ = 0;
+    audio_frame_fraction_ = 0;
     emit("AmberResetEnd", "result=success");
     if (reset_trace_count_ < 8)
       amber_trace::Write("Reset: native reset completed");
@@ -143,6 +145,28 @@ public:
         std::min<uint64_t>(available_ticks, maximum_catch_up);
     for (uint64_t tick = 0; tick < executed_ticks; ++tick) {
       const int32_t native = api_.Run(request);
+      if (audio_sample_rate_) {
+        audio_frame_fraction_ += audio_sample_rate_;
+        const uint64_t generated = audio_frame_fraction_ / 1000u;
+        audio_frame_fraction_ %= 1000u;
+        const uint64_t maximum_queue =
+            (static_cast<uint64_t>(audio_sample_rate_) * maximum_catch_up +
+             999u) /
+            1000u;
+        audio_frames_available_ = std::min<uint64_t>(
+            maximum_queue, audio_frames_available_ + generated);
+        if (audio_generate_diagnostic_count_ < 32) {
+          emit("AudioBudget",
+               "tick=" + std::to_string(native_tick_ + 1) +
+                   "; earned_frames=" + std::to_string(generated) +
+                   "; earned_samples=" +
+                   std::to_string(generated * audio_channel_count_) +
+                   "; queue_depth=" +
+                   std::to_string(audio_frames_available_) +
+                   "; result=success");
+          ++audio_generate_diagnostic_count_;
+        }
+      }
       /* The flat ABI exposes the emulator/CPU return value for observation;
        * it does not define that value as a progress count or error status.
        * The requested argument is the consumed time budget. */
@@ -172,6 +196,10 @@ public:
       return shutdown_result_ =
                  fail("Shutdown", "Amber return=0; DLL='" + path_ + "'");
     started_ = false;
+    emit("AudioQueueShutdown",
+         "discarded_frames=" + std::to_string(audio_frames_available_) +
+             "; result=success");
+    audio_frames_available_ = 0;
     emit("AmberShutdown", "native_return=1; result=success");
     amber_trace::Write("Shutdown: Amber return=1; Fabric result=0");
     return shutdown_result_ = ok();
@@ -359,7 +387,8 @@ public:
                                     "incompatible; returned size=" +
                                         std::to_string(returned) + "; DLL='" +
                                         path_ + "'");
-    if (f.Format != PA2_AUDIO_FORMAT_PCM_S16 || f.Channels != 2 ||
+    if (f.Format != PA2_AUDIO_FORMAT_PCM_S16 ||
+        (f.Channels != 1 && f.Channels != 2) ||
         f.BitsPerSample != 16)
       return unsupported(
           "GetAudioFormat",
@@ -370,6 +399,8 @@ public:
               "; encoding=" + std::to_string(f.Format));
     out.sample_rate = f.SampleRate;
     out.channel_count = static_cast<uint16_t>(f.Channels);
+    audio_sample_rate_ = f.SampleRate;
+    audio_channel_count_ = f.Channels;
     out.bits_per_sample = 16;
     out.interleaved = out.signed_samples = out.little_endian = 1;
     amber_trace::Write(
@@ -389,17 +420,30 @@ public:
                          "required audio exports are unavailable");
     if (capacity && !samples)
       return invalid("audio buffer is null");
-    if (capacity > UINT32_MAX / 2u ||
-        static_cast<uint64_t>(capacity) * 2u * sizeof(int16_t) > SIZE_MAX)
-      return invalid("FillAudioFrames frame capacity overflows the stereo "
+    if (!audio_sample_rate_) {
+      FabricAudioFormat ignored{};
+      const FabricResult format_result = audio_format(ignored);
+      if (format_result != FABRIC_OK)
+        return format_result;
+    }
+    if (capacity > UINT32_MAX / audio_channel_count_ ||
+        static_cast<uint64_t>(capacity) * audio_channel_count_ *
+                sizeof(int16_t) >
+            SIZE_MAX)
+      return invalid("FillAudioFrames frame capacity overflows the interleaved "
                      "sample extent; requested frames=" +
                      std::to_string(capacity));
-    written = api_.FillAudioFrames(samples, capacity);
-    total_audio_frames_ += written <= capacity ? written : 0;
+    const uint32_t permitted = static_cast<uint32_t>(
+        std::min<uint64_t>(capacity, audio_frames_available_));
+    written = permitted ? api_.FillAudioFrames(samples, permitted) : 0;
+    if (written <= permitted)
+      audio_frames_available_ -= written;
+    total_audio_frames_ += written <= permitted ? written : 0;
     if (audio_trace_count_ < 16) {
       uint32_t nonzero = 0;
-      if (samples && written <= capacity)
-        for (uint64_t i = 0; i < static_cast<uint64_t>(written) * 2u; ++i)
+      if (samples && written <= permitted)
+        for (uint64_t i = 0;
+             i < static_cast<uint64_t>(written) * audio_channel_count_; ++i)
           if (samples[i])
             ++nonzero;
       amber_trace::Write(
@@ -407,21 +451,37 @@ public:
           "; returned frames=" + std::to_string(written) +
           "; nonzero samples=" + std::to_string(nonzero) +
           "; total frames=" + std::to_string(total_audio_frames_) +
-          (written <= capacity ? "; Fabric result=0" : "; Fabric result=7"));
+          (written <= permitted ? "; Fabric result=0" : "; Fabric result=7"));
       ++audio_trace_count_;
       emit("AmberReadAudio", "requested_frames=" +
                                  std::to_string(capacity) +
+                                 "; permitted_frames=" +
+                                 std::to_string(permitted) +
                                  "; returned_frames=" +
                                  std::to_string(written) +
+                                 "; returned_samples=" +
+                                 std::to_string(static_cast<uint64_t>(written) *
+                                                audio_channel_count_) +
+                                 "; remaining_queue=" +
+                                 std::to_string(audio_frames_available_) +
                                  "; result=" +
-                                 (written <= capacity ? "success" : "failure"));
+                                 (written <= permitted ? "success" : "failure"));
+      emit("AudioGenerate",
+           "generated_frames=" + std::to_string(written) +
+               "; generated_samples=" +
+               std::to_string(static_cast<uint64_t>(written) *
+                              audio_channel_count_) +
+               "; queue_depth=" +
+               std::to_string(audio_frames_available_) +
+               "; result=" +
+               (written <= permitted ? "success" : "failure"));
     }
-    if (written > capacity) {
+    if (written > permitted) {
       const uint32_t invalid = written;
       written = 0;
       return fail("FillAudioFrames",
                   "returned frames=" + std::to_string(invalid) +
-                      "; requested frames=" + std::to_string(capacity));
+                      "; permitted frames=" + std::to_string(permitted));
     }
     return ok();
   }
@@ -641,8 +701,11 @@ private:
   uint64_t remainder_ = 0, sequence_ = 0, native_tick_ = 0;
   uint32_t advance_trace_count_ = 0, audio_trace_count_ = 0,
            reset_trace_count_ = 0, snapshot_trace_count_ = 0,
-           snapshot_diagnostic_count_ = 0;
+           snapshot_diagnostic_count_ = 0,
+           audio_generate_diagnostic_count_ = 0;
   uint64_t total_audio_frames_ = 0;
+  uint64_t audio_frames_available_ = 0, audio_frame_fraction_ = 0;
+  uint32_t audio_sample_rate_ = 0, audio_channel_count_ = 0;
   std::array<uint8_t, 512> previous_lamps_{};
   std::array<int32_t, 8> previous_reels_{};
   std::array<uint16_t, 16> previous_alpha_{};

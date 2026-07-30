@@ -119,5 +119,58 @@ entries. Fabric maps these to the same stable 512/8/1/16 output shape used by th
 bridge; it does not expose the unrelated 40-entry `LedDisplays` array as 40 Fabric displays.
 
 `GetAudioFormat` returns the size of the 24-byte `PA2_AudioFormat`. `FillAudioFrames` receives a
-frame capacity, writes interleaved stereo samples (`frames * channels` samples), and returns frames,
+frame capacity, writes interleaved mono or stereo samples (`frames * channels` samples), and returns frames,
 not samples. Fabric validates the stereo extent and the returned frame count before reporting it.
+
+### Production audio timing and units
+
+The production core has no PCM queue. `Run(8000)` executes one millisecond of the machine and may
+issue sound commands, but PCM is generated on demand later when `FillAudioFrames` is called. The
+direct backend calls that export for the 48 frames corresponding to each 48 kHz tick. Previously,
+Fabric passed the frontend's entire read capacity to this demand-driven export. A 96-frame capacity
+therefore advanced sample playback by 2 ms even when only one 1 ms native tick had executed. The
+returned count was correctly a frame count—the regression was an unbounded time entitlement, not a
+stereo sample/count conversion.
+
+Fabric now accrues a session-owned frame entitlement from executed ticks. At 48 kHz a tick earns 48
+frames; at 44.1 kHz successive ticks use a fractional accumulator and earn 44 or 45 frames, totaling
+441 frames per 10 ms. Catch-up earns frames once for each native tick actually executed. Reads pass
+only `min(requested_frames, available_frames)` to Amber and subtract only the frames Amber actually
+returns, so partial fills preserve the unused entitlement. The entitlement is capped at three ticks
+to match the execution catch-up limit; excess delayed audio time is explicitly discarded rather than
+allowing stale latency to grow without bound. Reset and shutdown discard the entitlement.
+
+The complete pipeline is:
+
+```text
+FabricSessionAdvance(elapsed nanoseconds)
+  -> fixed-tick accumulator
+  -> zero to three Run(8000) calls
+  -> sound commands/native playback state
+  -> frame entitlement (sample_rate / 1000 per executed tick)
+FabricSessionReadAudio(destination int16 elements, requested frame capacity)
+  -> clamp to frame entitlement
+  -> production FillAudioFrames(destination, permitted frames)
+  -> production writes returned_frames * channels int16 elements
+  -> Fabric returns frames_written (frames) to Oasis
+  -> Oasis submits those interleaved PCM frames to its audio sink
+```
+
+| Quantity | Meaning | Unit |
+|---|---|---|
+| `elapsed_nanoseconds` | Host time offered to Fabric | nanoseconds |
+| `executed_ticks` | Fixed native calls performed after clamping | 1 ms ticks |
+| `request` | Argument to production `Run` | CPU cycles (8,000/tick) |
+| `audio_frame_fraction_` | Fractional sample-rate numerator retained between ticks | frames × 1/1000 |
+| `audio_frames_available_` | Bounded permission to demand-generate PCM | frames |
+| `capacity` / `permitted` | Public/request-clamped audio buffer extent | frames |
+| `written` | Value returned by production Amber and Fabric | frames |
+| `audio_channel_count_` | Interleaved elements in one frame | channels |
+| `written * audio_channel_count_` | Initialized destination extent | `int16_t` elements/samples |
+| `... * sizeof(int16_t)` | Initialized destination byte extent | bytes |
+
+Diagnostics distinguish timing entitlement from actual PCM generation: `AudioBudget` reports earned
+frames/samples and bounded depth after each of the first 32 runs; `AudioGenerate` reports frames and
+interleaved samples actually produced by Amber; `AmberReadAudio` reports requested, permitted,
+returned, and remaining frames; and `AudioQueueShutdown` reports discarded entitlement. No sample
+contents are logged.

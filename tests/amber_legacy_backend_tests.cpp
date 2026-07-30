@@ -138,14 +138,15 @@ int main() {
   CHECK(lamps[3].brightness == 3.0f && lamps[4].brightness >= 3.0f);
   int16_t audio[8]{};
   uint32_t written = 0;
+  CHECK(FabricSessionAdvance(session, 1000000) == FABRIC_OK);
   CHECK(FabricSessionReadAudio(session, audio, 4, &written) == FABRIC_OK);
-  CHECK(written == 2 && audio[0] == 100 && audio[3] == 103);
+  CHECK(written == 4 && audio[0] == 100 && audio[7] == 107);
   /* Zero is the fake's normal Run return. It must not cause retry or failure;
    * a long delay is clamped to exactly three fixed native calls. */
   CHECK(FabricSessionAdvance(session, (static_cast<uint64_t>(INT32_MAX) + 5u) *
                                           125u) == FABRIC_OK);
   CHECK(FabricSessionGetSnapshot(session, &snap) == FABRIC_OK);
-  CHECK(lamps[2].brightness == 12.0f);
+  CHECK(lamps[2].brightness == 13.0f);
   uint32_t run_diagnostics = 0;
   for (const auto &message : diagnostics) {
     if (message.find("operation=AmberRun") != std::string::npos) {
@@ -153,7 +154,7 @@ int main() {
       CHECK(message.find("requested_cycles=8000") != std::string::npos);
     }
   }
-  CHECK(run_diagnostics == 12);
+  CHECK(run_diagnostics == 13);
   bool selected = false, loaded = false;
   for (const auto &message : diagnostics) {
     selected |= message.find("operation=AdapterSelected") != std::string::npos;
